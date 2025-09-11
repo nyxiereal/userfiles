@@ -1,6 +1,9 @@
 # Userfiles
 Collection of userscripts that I made for various purposes.
 
+> [!WARNING]
+> This will only work on [Violentmonkey](https://addons.mozilla.org/en-US/firefox/addon/violentmonkey/)!
+
 ## UETS (Universal Educational Tool Suite)
 A multi-cheat tool for some educational platforms.
 - Supports Quizizz/Wayground, Google Forms, and Testportal.
