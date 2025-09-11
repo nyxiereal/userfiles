@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      2.0.0
-// @description  A unified tool for educational platforms with AI analysis and search integration
+// @version      1.0.0
+// @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
 // @match        https://quizizz.com/*
@@ -49,13 +49,13 @@
             cursor: pointer; text-align: center; vertical-align: middle;
             transition: opacity 0.2s ease-in-out; border: none;
         }
-        .uets-ddg-link:hover, .uets-gemini-button:hover, .uets-copy-prompt-button:hover, 
+        .uets-ddg-link:hover, .uets-gemini-button:hover, .uets-copy-prompt-button:hover,
         .uets-ai-button:hover, .uets-ddg-button:hover { opacity: 0.85; }
         .uets-ddg-link, .uets-ddg-button { background-color: #4CAF50; }
         .uets-gemini-button, .uets-ai-button { background-color: #007bff; margin-left: 8px; }
         .uets-copy-prompt-button { background-color: #FF9800; margin-left: 8px; }
         .uets-ddg-button { margin-left: 8px; }
-        
+
         .uets-option-wrapper {
             display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; height: 100%;
         }
@@ -68,7 +68,7 @@
         .uets-ddg-link-main-question, .uets-gemini-button-main-question, .uets-copy-prompt-button-main-question {
             display: block; width: fit-content; margin: 8px auto 0 auto;
         }
-        
+
         .uets-gemini-response-popup {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background-color: #2d3748; color: #e2e8f0; border: 1px solid #4a5568;
@@ -95,7 +95,7 @@
         .uets-gemini-response-popup-loading {
             text-align: center; font-style: italic; color: #a0aec0; padding: 25px 0; font-size: 1.05em;
         }
-        
+
         #uets-toggle-ui-button {
             position: fixed; bottom: 15px; left: 15px; z-index: 10002;
             background-color: #607D8B; border: none; border-radius: 50%;
@@ -109,7 +109,7 @@
         #uets-toggle-ui-button:hover { background-color: #546E7A; transform: scale(1.05); }
         #uets-toggle-ui-button.uets-mods-hidden-state { background-color: transparent; }
         #uets-toggle-ui-button.uets-mods-hidden-state:hover { background-color: #ff0000; }
-        
+
         .gform-copy-button {
             margin-left: 12px; padding: 2px 8px; font-size: 12px; font-weight: bold;
             color: #fff; background-color: #1a73e8; border: none; border-radius: 4px;
@@ -604,7 +604,7 @@ Please perform the following:
             buttonContainer.classList.add('uets-multitool-button-container');
 
             const aiButton = document.createElement('button');
-            aiButton.textContent = "🧠 Ask AI";
+            aiButton.textContent = "Ask AI";
             aiButton.title = "Analyze question with AI";
             aiButton.classList.add('uets-ai-button');
             aiButton.onclick = async (e) => {
@@ -623,7 +623,7 @@ Please perform the following:
             buttonContainer.appendChild(aiButton);
 
             const ddgButton = document.createElement('button');
-            ddgButton.textContent = "🔎 DDG";
+            ddgButton.textContent = "DDG";
             ddgButton.title = "Search this question on DuckDuckGo";
             ddgButton.classList.add('uets-ddg-button');
             ddgButton.onclick = (e) => {
