@@ -27,7 +27,7 @@
 
     // === SHARED CONSTANTS ===
     const GEMINI_API_KEY_STORAGE = 'UETS_GEMINI_API_KEY';
-    const GEMINI_MODEL = 'gemini-2.0-flash';
+    const GEMINI_MODEL = 'gemini-2.5-flash';
     const UI_MODS_ENABLED_KEY = 'uets_ui_modifications_enabled';
 
     // === SHARED STATE ===
