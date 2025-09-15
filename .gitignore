@@ -1,0 +1,7 @@
+uets-server/.lock
+uets-server/quiz_data.json
+uets-server/bin
+uets-server/lib
+uets-server/lib64
+uets-server/CACHEDIR.TAG
+uets-server/pyvenv.cfg

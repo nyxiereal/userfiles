@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1
+// @version      1.1.0
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
 // @match        https://quizizz.com/*
 // @match        https://wayground.com/*
+// @match        https://*.quizizz.com/*
+// @match        https://*.wayground.com/*
 // @match        https://*.testportal.net/*
 // @match        https://*.testportal.pl/*
 // @match        https://docs.google.com/forms/d/e/*/viewform*
@@ -19,7 +21,10 @@
 // @grant        GM_setClipboard
 // @connect      media.quizizz.com
 // @connect      generativelanguage.googleapis.com
+// @connect      localhost:5000
 // @connect      *
+// @downloadURL  https://raw.githubusercontent.com/nyxiereal/userfiles/master/uets.user.js
+// @updateURL    https://raw.githubusercontent.com/nyxiereal/userfiles/master/uets.user.js
 // ==/UserScript==
 
 (function () {
@@ -29,6 +34,7 @@
     const GEMINI_API_KEY_STORAGE = 'UETS_GEMINI_API_KEY';
     const GEMINI_MODEL = 'gemini-2.5-flash';
     const UI_MODS_ENABLED_KEY = 'uets_ui_modifications_enabled';
+    const SERVER_URL = 'http://localhost:5000';
 
     // === SHARED STATE ===
     const sharedState = {
@@ -38,23 +44,26 @@
         elementsToCleanup: [],
         observer: null,
         currentDomain: window.location.hostname,
-        originalRegExpTest: RegExp.prototype.test
+        originalRegExpTest: RegExp.prototype.test,
+        quizData: {},
+        currentQuestionId: null,
+        questionsPool: {} // Add this to store all questions with their options
     };
 
     // === SHARED STYLES ===
     GM_addStyle(`
-        .uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-ai-button, .uets-ddg-button {
+        .uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-ai-button, .uets-ddg-button, .uets-get-answer-button {
             display: inline-block; padding: 5px 8px;
             color: white; text-decoration: none; border-radius: 4px; font-size: 0.8em;
             cursor: pointer; text-align: center; vertical-align: middle;
             transition: opacity 0.2s ease-in-out; border: none;
         }
         .uets-ddg-link:hover, .uets-gemini-button:hover, .uets-copy-prompt-button:hover,
-        .uets-ai-button:hover, .uets-ddg-button:hover { opacity: 0.85; }
+        .uets-ai-button:hover, .uets-ddg-button:hover, .uets-get-answer-button:hover { opacity: 0.85; }
         .uets-ddg-link, .uets-ddg-button { background-color: #4CAF50; }
-        .uets-gemini-button, .uets-ai-button { background-color: #007bff; margin-left: 8px; }
-        .uets-copy-prompt-button { background-color: #FF9800; margin-left: 8px; }
-        .uets-ddg-button { margin-left: 8px; }
+        .uets-gemini-button, .uets-ai-button { background-color: #007bff; }
+        .uets-copy-prompt-button { background-color: #FF9800; }
+        .uets-get-answer-button { background-color: #9C27B0; }
 
         .uets-option-wrapper {
             display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; height: 100%;
@@ -66,11 +75,14 @@
             width: 100%; box-sizing: border-box; margin-top: 16px; padding: 6px 0; border-radius: 0 0 4px 4px; flex-shrink: 0;
         }
         .uets-ddg-link-main-question, .uets-gemini-button-main-question, .uets-copy-prompt-button-main-question {
-            display: block; width: fit-content; margin: 8px auto 0 auto;
+        display: inline-block; width: fit-content; margin: 0;
+        }
+        .uets-main-question-buttons-container {
+            display: flex; justify-content: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;
         }
 
-        .uets-gemini-response-popup {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        .uets-response-popup {
+            position: fixed; top: 20%; left: 50%; transform: translate(-50%, 0%);
             background-color: #2d3748; color: #e2e8f0; border: 1px solid #4a5568;
             border-radius: 8px; padding: 20px; z-index: 10001; min-width: 380px;
             max-width: 650px; max-height: 80vh; overflow-y: auto;
@@ -78,21 +90,21 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
             font-size: 15px;
         }
-        .uets-gemini-response-popup-header {
+        .uets-response-popup-header {
             display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #4a5568;
         }
-        .uets-gemini-response-popup-title { font-weight: 600; font-size: 1.2em; color: #a0aec0; }
-        .uets-gemini-response-popup-close {
+        .uets-response-popup-title { font-weight: 600; font-size: 1.2em; color: #a0aec0; }
+        .uets-response-popup-close {
             background: none; border: none; font-size: 1.9em; line-height: 1;
             cursor: pointer; color: #a0aec0; padding: 0 5px; transition: color 0.2s ease-in-out;
         }
-        .uets-gemini-response-popup-close:hover { color: #cbd5e0; }
-        .uets-gemini-response-popup-content {
+        .uets-response-popup-close:hover { color: #cbd5e0; }
+        .uets-response-popup-content {
             white-space: pre-wrap; font-size: 1em; line-height: 1.65; color: #cbd5e0;
         }
-        .uets-gemini-response-popup-content strong, .uets-gemini-response-popup-content b { color: #e2e8f0; font-weight: 600; }
-        .uets-gemini-response-popup-loading {
+        .uets-response-popup-content strong, .uets-response-popup-content b { color: #e2e8f0; font-weight: 600; }
+        .uets-response-popup-loading {
             text-align: center; font-style: italic; color: #a0aec0; padding: 25px 0; font-size: 1.05em;
         }
 
@@ -108,7 +120,7 @@
         }
         #uets-toggle-ui-button:hover { background-color: #546E7A; transform: scale(1.05); }
         #uets-toggle-ui-button.uets-mods-hidden-state { background-color: transparent; }
-        #uets-toggle-ui-button.uets-mods-hidden-state:hover { background-color: #ff0000; }
+        #uets-toggle-ui-button.uets-mods-hidden-state:hover { background-color: #transparent; }
 
         .gform-copy-button {
             margin-left: 12px; padding: 2px 8px; font-size: 12px; font-weight: bold;
@@ -117,7 +129,147 @@
         }
         .gform-copy-button:hover { background-color: #287ae6; }
         .gform-copy-button:disabled { background-color: #8ab4f8; cursor: default; }
+
+        .uets-correct-answer {
+            background-color: rgba(76, 175, 80, 0.3) !important;
+            border: 2px solid #4CAF50 !important;
+        }
+        .uets-answer-indicator {
+            position: absolute; top: 5px; right: 5px; background: #4CAF50;
+            color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px;
+            font-weight: bold; z-index: 1000;
+        }
+        .uets-streak-bonus {
+            margin-left: 5px;
+            color: #FFD700;
+            font-weight: bold;
+            font-size: 0.9em;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
     `);
+
+    // === SERVER COMMUNICATION ===
+    const sendQuestionToServer = async (questionId, questionType, answerIds) => {
+        try {
+            const response = await fetch(`${SERVER_URL}/api/question`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ questionId, questionType, answerIds })
+            });
+            return await response.json();
+        } catch (error) {
+            GM_log('Error sending question to server:', error);
+            return null;
+        }
+    };
+
+    const sendAnswerToServer = async (questionId, correctAnswers) => {
+        try {
+            const response = await fetch(`${SERVER_URL}/api/answer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ questionId, correctAnswers })
+            });
+            return await response.json();
+        } catch (error) {
+            GM_log('Error sending answer to server:', error);
+            return null;
+        }
+    };
+
+    // === ANSWER HIGHLIGHTING ===
+    const highlightCorrectAnswers = (correctAnswers, questionType) => {
+        if (!sharedState.uiModificationsEnabled) return;
+
+        const optionButtons = document.querySelectorAll('button.option');
+        optionButtons.forEach(button => {
+            button.classList.remove('uets-correct-answer');
+            const indicator = button.querySelector('.uets-answer-indicator');
+            if (indicator) indicator.remove();
+        });
+
+        if (questionType === 'BLANK') {
+            showCorrectAnswersModal(correctAnswers, questionType);
+            return;
+        }
+
+        // Get the current question data to match answer IDs to text
+        const currentQuestion = sharedState.questionsPool[sharedState.currentQuestionId];
+        if (!currentQuestion) {
+            showCorrectAnswersModal(correctAnswers, questionType);
+            return;
+        }
+
+        // Display the correct answers in a modal
+        showCorrectAnswersModal(correctAnswers, questionType, currentQuestion);
+
+        // Still highlight the buttons if possible
+        optionButtons.forEach(button => {
+            const optionId = button.getAttribute('data-option-id') ||
+                button.querySelector('[data-option-id]')?.getAttribute('data-option-id');
+
+            if (optionId && correctAnswers.includes(optionId)) {
+                button.classList.add('uets-correct-answer');
+                button.style.position = 'relative';
+
+                const indicator = document.createElement('div');
+                indicator.className = 'uets-answer-indicator';
+                indicator.textContent = '✓';
+                button.appendChild(indicator);
+            }
+        });
+    };
+
+    // === NEW: SHOW CORRECT ANSWERS MODAL ===
+    const showCorrectAnswersModal = (correctAnswers, questionType, questionData = null) => {
+        if (!sharedState.uiModificationsEnabled) return;
+
+        let content = '';
+
+        if (questionType === 'BLANK') {
+            content = `${correctAnswers}`;
+        } else if (questionType === 'MCQ') {
+            const correctIndex = correctAnswers;
+
+            if (!questionData && sharedState.currentQuestionId) {
+                questionData = sharedState.questionsPool[sharedState.currentQuestionId];
+            }
+
+            if (questionData && questionData.structure && questionData.structure.options && questionData.structure.options[correctIndex]) {
+                const div = document.createElement('div');
+                div.innerHTML = questionData.structure.options[correctIndex].text;
+                content = `${div.textContent.trim()}`;
+            } else {
+                content = `Option ${correctIndex + 1}`;
+            }
+        } else if (questionType === 'MSQ') {
+            if (!questionData && sharedState.currentQuestionId) {
+                questionData = sharedState.questionsPool[sharedState.currentQuestionId];
+            }
+
+            if (questionData && questionData.structure && questionData.structure.options) {
+                const correctOptions = correctAnswers.map(index => {
+                    if (questionData.structure.options[index]) {
+                        const div = document.createElement('div');
+                        div.innerHTML = questionData.structure.options[index].text;
+                        return div.textContent.trim();
+                    }
+                    return `Option ${index + 1}`;
+                });
+                content = `${correctOptions.join('\n')}`;
+            } else {
+                content = `Options ${correctAnswers.map(i => i + 1).join(', ')}`;
+            }
+        } else {
+            if (Array.isArray(correctAnswers)) {
+                content = `${correctAnswers.join(', ')}`;
+            } else {
+                content = `${correctAnswers}`;
+            }
+        }
+
+        showResponsePopup(content, false, "Correct Answers");
+    };
 
     // === SHARED API KEY MANAGEMENT ===
     GM_registerMenuCommand('Set Gemini API Key', () => {
@@ -213,7 +365,7 @@ Please perform the following:
 
         const apiPayload = {
             contents: requestPayloadContents,
-            generationConfig: { temperature: 0.2, maxOutputTokens: 500, topP: 0.95, topK: 40 },
+            generationConfig: { temperature: 0.2, topP: 0.95, topK: 40 },
             safetySettings: [
                 { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
                 { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
@@ -222,7 +374,7 @@ Please perform the following:
             ]
         };
 
-        showGeminiResponsePopup("Loading AI insights...", true);
+        showResponsePopup("Loading AI insights...", true, "AI Assistant");
 
         GM_xmlhttpRequest({
             method: 'POST', url: apiUrl, headers: { 'Content-Type': 'application/json' },
@@ -230,28 +382,29 @@ Please perform the following:
             onload: (response) => {
                 try {
                     const result = JSON.parse(response.responseText);
+                    console.log("Gemini API Response:", result);
                     if (result.candidates && result.candidates.length > 0 &&
                         result.candidates[0].content && result.candidates[0].content.parts &&
                         result.candidates[0].content.parts.length > 0) {
                         const geminiText = result.candidates[0].content.parts[0].text;
-                        showGeminiResponsePopup(geminiText);
+                        showResponsePopup(geminiText, false, "AI Assistant");
                     } else if (result.error) {
-                        showGeminiResponsePopup(`Gemini API Error: ${result.error.message}`);
+                        showResponsePopup(`Gemini API Error: ${result.error.message}`, false, "AI Assistant");
                     } else {
-                        showGeminiResponsePopup('Gemini API Error: Could not parse a valid response.');
+                        showResponsePopup('Gemini API Error: Could not parse a valid response.', false, "AI Assistant");
                     }
                 } catch (e) {
-                    showGeminiResponsePopup('Gemini API Error: Failed to parse response.\n' + e.message);
+                    showResponsePopup('Gemini API Error: Failed to parse response.\n' + e.message, false, "AI Assistant");
                 }
             },
             onerror: (response) => {
-                showGeminiResponsePopup(`Gemini API Error: Request failed. Status: ${response.status}`);
+                showResponsePopup(`Gemini API Error: Request failed. Status: ${response.status}`, false, "AI Assistant");
             },
-            ontimeout: () => showGeminiResponsePopup('Gemini API Error: Request timed out.')
+            ontimeout: () => showResponsePopup('Gemini API Error: Request timed out.', false, "AI Assistant")
         });
     };
 
-    const showGeminiResponsePopup = (content, isLoading = false) => {
+    const showResponsePopup = (content, isLoading = false, title = "AI Assistant") => {
         if (!sharedState.uiModificationsEnabled) {
             if (sharedState.geminiPopup) {
                 sharedState.geminiPopup.remove();
@@ -264,38 +417,41 @@ Please perform the following:
         if (!popup) {
             popup = document.createElement('div');
             popup.id = 'uets-gemini-popup';
-            popup.classList.add('uets-gemini-response-popup');
+            popup.classList.add('uets-response-popup');
 
             const header = document.createElement('div');
-            header.classList.add('uets-gemini-response-popup-header');
+            header.classList.add('uets-response-popup-header');
 
-            const title = document.createElement('span');
-            title.classList.add('uets-gemini-response-popup-title');
-            title.textContent = "AI Assistant";
+            const titleElement = document.createElement('span');
+            titleElement.classList.add('uets-response-popup-title');
+            titleElement.textContent = title;
 
             const closeButton = document.createElement('button');
-            closeButton.classList.add('uets-gemini-response-popup-close');
+            closeButton.classList.add('uets-response-popup-close');
             closeButton.innerHTML = '×';
             closeButton.onclick = () => {
                 popup.remove();
                 sharedState.geminiPopup = null;
             };
 
-            header.appendChild(title);
+            header.appendChild(titleElement);
             header.appendChild(closeButton);
             popup.appendChild(header);
 
             const contentDiv = document.createElement('div');
-            contentDiv.classList.add('uets-gemini-response-popup-content');
+            contentDiv.classList.add('uets-response-popup-content');
             popup.appendChild(contentDiv);
 
             document.body.appendChild(popup);
             sharedState.geminiPopup = popup;
+        } else {
+            const titleElement = popup.querySelector('.uets-response-popup-title');
+            if (titleElement) titleElement.textContent = title;
         }
 
-        const contentDiv = popup.querySelector('.uets-gemini-response-popup-content');
+        const contentDiv = popup.querySelector('.uets-response-popup-content');
         if (isLoading) {
-            contentDiv.innerHTML = `<div class="uets-gemini-response-popup-loading">${content}</div>`;
+            contentDiv.innerHTML = `<div class="uets-response-popup-loading">${content}</div>`;
         } else {
             let formattedContent = content.replace(/^(Correct Answer\(s\):)/gmi, '<strong>$1</strong>');
             formattedContent = formattedContent.replace(/^(Reasoning:)/gmi, '<br><br><strong>$1</strong>');
@@ -324,15 +480,13 @@ Please perform the following:
         updateToggleButtonAppearance();
 
         if (!sharedState.uiModificationsEnabled) {
-            // Clean up existing UETS elements when disabling
-            document.querySelectorAll('.uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button').forEach(el => el.remove());
+            document.querySelectorAll('.uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-get-answer-button, .uets-main-question-buttons-container, .uets-streak-bonus').forEach(el => el.remove());
 
             if (sharedState.geminiPopup) {
                 sharedState.geminiPopup.remove();
                 sharedState.geminiPopup = null;
             }
 
-            // For Quizizz, only remove UETS wrappers but preserve original buttons
             document.querySelectorAll('.uets-option-wrapper').forEach(wrapper => {
                 const button = wrapper.querySelector('button.option');
                 if (button && wrapper.parentNode) {
@@ -341,7 +495,6 @@ Please perform the following:
                 wrapper.remove();
             });
 
-            // Clean up other UETS elements
             sharedState.elementsToCleanup.forEach(el => {
                 if (el && el.parentNode && !el.querySelector('button.option')) {
                     el.remove();
@@ -349,7 +502,6 @@ Please perform the following:
             });
             sharedState.elementsToCleanup = [];
 
-            // For Google Forms, reset the dataset flag to allow re-adding buttons on re-enable
             if (sharedState.currentDomain.includes('docs.google.com')) {
                 const questionBlocks = document.querySelectorAll('div[role="listitem"] > div[jsmodel]');
                 questionBlocks.forEach(block => {
@@ -357,7 +509,6 @@ Please perform the following:
                 });
             }
 
-            // For Testportal, reset the dataset flag to allow re-adding enhancements on re-enable
             if (sharedState.currentDomain.includes('testportal.net') || sharedState.currentDomain.includes('testportal.pl')) {
                 const questionElements = document.querySelectorAll('.question_essence');
                 questionElements.forEach(el => {
@@ -365,7 +516,6 @@ Please perform the following:
                 });
             }
         } else {
-            // Re-run domain-specific initialization when enabling
             setTimeout(() => {
                 initializeDomainSpecific();
             }, 100);
@@ -392,7 +542,8 @@ Please perform the following:
             questionImage: 'div[data-testid="question-container-text"] img, div[class*="question-media-container"] img, img[data-testid="question-container-image"], .question-image',
             optionButtons: 'button.option',
             optionText: 'div#optionText p, .option-text p, .resizeable p',
-            pageInfo: 'div.pill p, div[class*="question-counter"] p'
+            pageInfo: 'div.pill p, div[class*="question-counter"] p',
+            quizContainer: 'div[data-quesid]'
         },
 
         lastPageInfo: "INITIAL_STATE",
@@ -413,13 +564,16 @@ Please perform the following:
             return button;
         },
 
-        extractAndProcess: () => {
+        getCurrentQuestionId: () => {
+            const quizContainer = document.querySelector(quizizzModule.selectors.quizContainer);
+            return quizContainer ? quizContainer.getAttribute('data-quesid') : null;
+        },
+
+        extractAndProcess: async () => {
             if (!sharedState.uiModificationsEnabled) return;
 
-            // Clean up existing UETS elements first (but not original buttons)
-            document.querySelectorAll('.uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button').forEach(el => el.remove());
+            document.querySelectorAll('.uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-get-answer-button, .uets-main-question-buttons-container, .uets-streak-bonus').forEach(el => el.remove());
 
-            // Clean up existing wrappers and restore original button layout
             document.querySelectorAll('.uets-option-wrapper').forEach(wrapper => {
                 const button = wrapper.querySelector('button.option');
                 if (button && wrapper.parentNode) {
@@ -428,23 +582,38 @@ Please perform the following:
                 wrapper.remove();
             });
 
-            // Filter out removed elements from cleanup array
             sharedState.elementsToCleanup = sharedState.elementsToCleanup.filter(el => {
                 return el && el.parentNode;
             });
+
+            const currentQuestionId = quizizzModule.getCurrentQuestionId();
+            if (currentQuestionId !== sharedState.currentQuestionId) {
+                sharedState.currentQuestionId = currentQuestionId;
+
+                if (currentQuestionId && sharedState.quizData[currentQuestionId]) {
+                    const questionData = sharedState.quizData[currentQuestionId];
+                    const response = await sendQuestionToServer(
+                        currentQuestionId,
+                        questionData.type,
+                        questionData.structure.options ? questionData.structure.options.map(opt => opt.id) : []
+                    );
+
+                    if (response && response.hasAnswer) {
+                        highlightCorrectAnswers(response.correctAnswers, response.questionType);
+                    }
+                }
+            }
 
             let questionTitle = '';
             let optionTexts = [];
             let questionImageUrl = null;
 
-            // Extract question image
             const questionImageElement = document.querySelector(quizizzModule.selectors.questionImage);
             if (questionImageElement?.src) {
                 questionImageUrl = questionImageElement.src.startsWith('/') ?
                     window.location.origin + questionImageElement.src : questionImageElement.src;
             }
 
-            // Extract question text
             const questionTitleTextElement = document.querySelector(quizizzModule.selectors.questionText);
             const questionTextOuterContainer = document.querySelector(quizizzModule.selectors.questionContainer);
 
@@ -452,17 +621,18 @@ Please perform the following:
                 questionTitle = questionTitleTextElement.textContent.trim();
 
                 if (questionTitle || questionImageUrl) {
-                    // DDG link
+                    const buttonsContainer = document.createElement('div');
+                    buttonsContainer.classList.add('uets-main-question-buttons-container');
+                    sharedState.elementsToCleanup.push(buttonsContainer);
+
                     const ddgQLink = document.createElement('a');
                     ddgQLink.href = `https://duckduckgo.com/?q=${encodeURIComponent(questionTitle || "quiz question")}`;
                     ddgQLink.textContent = 'DDG Q';
                     ddgQLink.target = '_blank';
                     ddgQLink.rel = 'noopener noreferrer';
                     ddgQLink.classList.add('uets-ddg-link', 'uets-ddg-link-main-question');
-                    questionTextOuterContainer.appendChild(ddgQLink);
-                    sharedState.elementsToCleanup.push(ddgQLink);
+                    buttonsContainer.appendChild(ddgQLink);
 
-                    // Copy prompt button
                     const copyPromptButton = quizizzModule.createButton('Copy Prompt', 'uets-copy-prompt-button uets-copy-prompt-button-main-question', async () => {
                         const prompt = buildGeminiPrompt(questionTitle || "(See attached image)", optionTexts, !!questionImageUrl, 'quiz');
                         try {
@@ -473,61 +643,44 @@ Please perform the following:
                             alert('Failed to copy prompt.');
                         }
                     });
-                    questionTextOuterContainer.appendChild(copyPromptButton);
-                    sharedState.elementsToCleanup.push(copyPromptButton);
+                    buttonsContainer.appendChild(copyPromptButton);
 
-                    // Gemini button
                     const geminiButton = quizizzModule.createButton('Ask AI', 'uets-gemini-button uets-gemini-button-main-question', async () => {
                         let imageData = null;
                         if (questionImageUrl) {
                             try {
                                 imageData = await fetchImageAsBase64(questionImageUrl);
                             } catch (error) {
-                                showGeminiResponsePopup(`Failed to fetch image: ${error}\nProceeding with text only.`);
+                                showResponsePopup(`Failed to fetch image: ${error}\nProceeding with text only.`);
                             }
                         }
                         askGemini(questionTitle || "(See attached image)", optionTexts, imageData, 'quiz');
                     });
-                    questionTextOuterContainer.appendChild(geminiButton);
-                    sharedState.elementsToCleanup.push(geminiButton);
+                    buttonsContainer.appendChild(geminiButton);
+
+                    const getAnswerButton = quizizzModule.createButton('Get Answer', 'uets-get-answer-button', async () => {
+                        const questionData = sharedState.quizData[sharedState.currentQuestionId];
+                        if (questionData) {
+                            const response = await sendQuestionToServer(
+                                sharedState.currentQuestionId,
+                                questionData.type,
+                                questionData.structure.options ? questionData.structure.options.map(opt => opt.id) : []
+                            );
+                            if (response && response.hasAnswer) {
+                                console.log('Received answer from server:', response);
+                                highlightCorrectAnswers(response.correctAnswers, response.questionType);
+                            } else {
+                                showResponsePopup("No answer available yet.");
+                            }
+                        } else {
+                            showResponsePopup("Question data not found.");
+                        }
+                    });
+                    buttonsContainer.appendChild(getAnswerButton);
+
+                    questionTextOuterContainer.appendChild(buttonsContainer);
                 }
             }
-
-            // Process options - wait a bit for DOM to be ready
-            setTimeout(() => {
-                optionTexts = [];
-                const optionButtons = document.querySelectorAll(quizizzModule.selectors.optionButtons);
-
-                optionButtons.forEach(button => {
-                    // Skip if already wrapped
-                    if (button.closest('.uets-option-wrapper')) return;
-
-                    const optionTextElement = button.querySelector(quizizzModule.selectors.optionText);
-                    if (optionTextElement) {
-                        const optionText = optionTextElement.textContent.trim();
-                        if (optionText) optionTexts.push(optionText);
-
-                        const ddgLink = document.createElement('a');
-                        ddgLink.href = `https://duckduckgo.com/?q=${encodeURIComponent(optionText)}`;
-                        ddgLink.textContent = 'DDG';
-                        ddgLink.target = '_blank';
-                        ddgLink.rel = 'noopener noreferrer';
-                        ddgLink.classList.add('uets-ddg-link', 'uets-ddg-link-option-item');
-
-                        const wrapper = document.createElement('div');
-                        wrapper.classList.add('uets-option-wrapper');
-                        wrapper.style.flexBasis = button.style.flexBasis || '100%';
-
-                        if (button.parentNode) {
-                            button.parentNode.insertBefore(wrapper, button);
-                            wrapper.appendChild(button);
-                            wrapper.appendChild(ddgLink);
-                            sharedState.elementsToCleanup.push(wrapper);
-                        }
-                        button.style.maxWidth = '100%';
-                    }
-                });
-            }, 50);
         },
 
         checkPageInfoAndReprocess: () => {
@@ -540,8 +693,31 @@ Please perform the following:
             }
         },
 
+        enhanceStreakCounter: () => {
+            const streakSpan = document.querySelector('span[data-testid="streak-pill-level"]');
+            if (streakSpan && !streakSpan.nextSibling?.classList?.contains('uets-streak-bonus')) {
+                const bonusSpan = document.createElement('span');
+                bonusSpan.classList.add('uets-streak-bonus');
+                streakSpan.parentNode.insertBefore(bonusSpan, streakSpan.nextSibling);
+
+                const updateBonus = () => {
+                    const level = parseInt(streakSpan.textContent.trim()) || 0;
+                    let bonus = 0;
+                    if (level >= 1 && level <= 3) bonus = 100;
+                    else if (level >= 4 && level <= 6) bonus = 200;
+                    else if (level >= 7) bonus = 300;
+                    bonusSpan.textContent = `+${bonus}`;
+                };
+
+                updateBonus();
+
+                // Observe changes to the streak span's text
+                const observer = new MutationObserver(updateBonus);
+                observer.observe(streakSpan, { childList: true, subtree: true, characterData: true });
+            }
+        },
+
         initialize: () => {
-            // Reset the last page info to force initial processing
             quizizzModule.lastPageInfo = "INITIAL_STATE";
 
             if (sharedState.observer) sharedState.observer.disconnect();
@@ -549,14 +725,18 @@ Please perform the following:
             sharedState.observer = new MutationObserver(quizizzModule.debounce(() => {
                 if (sharedState.uiModificationsEnabled) {
                     quizizzModule.checkPageInfoAndReprocess();
+                    quizizzModule.enhanceStreakCounter();
                 }
             }, 500));
 
             sharedState.observer.observe(document.body, { childList: true, subtree: true });
 
-            // Force initial processing
             if (sharedState.uiModificationsEnabled) {
                 quizizzModule.extractAndProcess();
+                quizizzModule.enhanceStreakCounter();
+                // Add delay to check for existing streak element
+                // NOTE: this may not be enough on shitty connections
+                setTimeout(() => quizizzModule.enhanceStreakCounter(), 1000);
             }
         }
     };
@@ -794,7 +974,6 @@ Please perform the following:
                 const headingContainer = block.querySelector('div[role="heading"]');
                 if (!headingContainer) return;
 
-                // Copy button
                 const copyButton = document.createElement('button');
                 copyButton.textContent = 'Copy';
                 copyButton.className = 'gform-copy-button';
@@ -802,7 +981,6 @@ Please perform the following:
                 headingContainer.appendChild(copyButton);
                 sharedState.elementsToCleanup.push(copyButton);
 
-                // Ask AI button
                 const aiButton = document.createElement('button');
                 aiButton.textContent = 'Ask AI';
                 aiButton.classList.add('uets-ai-button');
@@ -810,7 +988,6 @@ Please perform the following:
                 headingContainer.appendChild(aiButton);
                 sharedState.elementsToCleanup.push(aiButton);
 
-                // DDG button
                 const ddgButton = document.createElement('button');
                 ddgButton.textContent = 'DDG';
                 ddgButton.classList.add('uets-ddg-button');
@@ -836,6 +1013,193 @@ Please perform the following:
         }
     };
 
+    // === SHARED QUIZ DATA PROCESSOR ===
+    const processQuizData = (data) => {
+        console.log("Trying to get all questions...");
+        const questionKeys = Object.keys(data.room.questions);
+        for (const questionKey of questionKeys) {
+            console.log("----------------");
+            const questionData = data.room.questions[questionKey];
+            sharedState.quizData[questionKey] = questionData;
+
+            // Store the complete question data in questionsPool
+            sharedState.questionsPool[questionKey] = questionData;
+
+            console.log(`Question ID: ${questionKey}`);
+            console.log(`Question Type: ${questionData.type}`);
+            console.log(`Question Text: ${questionData.structure.query.text}`);
+            if (questionData.structure.query.media) {
+                for (const media of questionData.structure.query.media) {
+                    console.log(`Media URL: ${media.url} (Type: ${media.type})`);
+                }
+            }
+            const options = questionData.structure.options || [];
+            for (const option of options) {
+                console.log(`Option: ${option.text} (${option.id})`);
+                if (option.media) {
+                    for (const media of option.media) {
+                        console.log(`Media URL: ${media.url} (Type: ${media.type})`);
+                    }
+                }
+            }
+        }
+    };
+
+    // === REQUEST INTERCEPTION ===
+    const originalXMLHttpRequestOpen = XMLHttpRequest.prototype.open;
+    const originalXMLHttpRequestSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function (method, url, ...args) {
+        this._method = method;
+        this._url = url;
+
+        if (typeof url === 'string' && (url.includes('https://game.wayground.com/play-api/v4/soloJoin') || url.includes('https://game.wayground.com/play-api/v6/rejoinGame') || url.includes('https://game.wayground.com/play-api/v5/join'))) {
+            this.addEventListener('load', function () {
+                if (this.status === 200) {
+                    try {
+                        const data = JSON.parse(this.responseText);
+                        processQuizData(data);
+                    } catch (e) {
+                        console.log('Failed to parse response:', e);
+                    }
+                }
+            });
+        }
+
+        if (typeof url === 'string' && url.includes('https://game.wayground.com/play-api/v4/proceedGame')) {
+            this.addEventListener('readystatechange', function () {
+                if (this.readyState === 4 && this.status === 200) {
+                    try {
+                        const data = JSON.parse(this.responseText);
+                        console.log('ProceedGame response:', data);
+                        if (data.response && data.question && data.question.structure && data.question.structure.answer !== undefined) {
+                            const questionId = data.response.questionId;
+                            var correctAnswer = data.question.structure.answer;
+                            if (correctAnswer == 0 && data.question.structure.options !== undefined) {
+                                var correctAnswer = data.question.structure.options[0].text;
+                            }
+                            console.log('Correct answer:', correctAnswer);
+                            console.log('Sending correct answer to server:', questionId, correctAnswer);
+                            sendAnswerToServer(questionId, correctAnswer);
+                        }
+                    } catch (e) {
+                        console.log('Failed to parse proceedGame response:', e);
+                    }
+                }
+            });
+        }
+
+        return originalXMLHttpRequestOpen.call(this, method, url, ...args);
+    };
+
+    XMLHttpRequest.prototype.send = function (data) {
+        // Intercept POST requests to proceedGame and modify timeTaken
+        if (this._method === 'POST' && this._url && this._url.includes('https://game.wayground.com/play-api/v4/proceedGame')) {
+            if (data) {
+                try {
+                    const requestData = JSON.parse(data);
+                    console.log('Original proceedGame request:', requestData);
+
+                    // Modify timeTaken
+                    var timetakenforce = Math.floor(Math.random() * (7067 - 5067 + 1)) + 5067;
+                    if (requestData.response && requestData.response.timeTaken !== undefined) {
+                        console.log(`Changing timeTaken from ${requestData.response.timeTaken} to ${timetakenforce}`);
+                        requestData.response.timeTaken = timetakenforce;
+                        requestData.response.attempt = 0; // force attempts to be at 0, MAYBE prevent scores from being lowered
+                    }
+
+                    const modifiedData = JSON.stringify(requestData);
+                    console.log('Modified proceedGame request:', requestData);
+
+                    return originalXMLHttpRequestSend.call(this, modifiedData);
+                } catch (e) {
+                    console.log('Failed to parse/modify proceedGame request:', e);
+                    return originalXMLHttpRequestSend.call(this, data);
+                }
+            }
+        }
+
+        // Intercept requests to reaction-update and resend twice
+        if (this._method === 'POST' && this._url && this._url.includes('https://wayground.com/_gameapi/main/public/v1/games/') && this._url.includes('/reaction-update')) {
+            // Send original request
+            const result = originalXMLHttpRequestSend.call(this, data);
+            // Resend twice
+            setTimeout(() => {
+                const xhr1 = new XMLHttpRequest();
+                xhr1.open(this._method, this._url);
+                xhr1.send(data);
+            }, 100);
+            setTimeout(() => {
+                const xhr2 = new XMLHttpRequest();
+                xhr2.open(this._method, this._url);
+                xhr2.send(data);
+            }, 200);
+            return result;
+        }
+
+        return originalXMLHttpRequestSend.call(this, data);
+    };
+
+    const originalFetch = window.fetch;
+    window.fetch = function (url, options) {
+        // Intercept POST requests to proceedGame via fetch
+        if (typeof url === 'string' && url.includes('https://game.wayground.com/play-api/v4/proceedGame') &&
+            options && options.method === 'POST' && options.body) {
+            try {
+                const requestData = JSON.parse(options.body);
+                console.log('Original proceedGame fetch request:', requestData);
+
+                // Modify timeTaken to 4000
+                if (requestData.response && requestData.response.timeTaken !== undefined) {
+                    console.log(`Changing timeTaken from ${requestData.response.timeTaken} to 4000`);
+                    requestData.response.timeTaken = 4000;
+                }
+
+                const modifiedOptions = {
+                    ...options,
+                    body: JSON.stringify(requestData)
+                };
+                console.log('Modified proceedGame fetch request:', requestData);
+
+                return originalFetch.call(this, url, modifiedOptions);
+            } catch (e) {
+                console.log('Failed to parse/modify proceedGame fetch request:', e);
+            }
+        }
+
+        if (typeof url === 'string' && (url.includes('https://game.wayground.com/play-api/v4/soloJoin') || url.includes('https://game.wayground.com/play-api/v6/rejoinGame') || url.includes('https://game.wayground.com/play-api/v5/join'))) {
+            return originalFetch.call(this, url, options).then(response => {
+                if (response.ok) {
+                    return response.clone().json().then(data => {
+                        processQuizData(data);
+                        return response;
+                    }).catch(() => response);
+                }
+                return response;
+            });
+        }
+
+        if (typeof url === 'string' && url.includes('https://game.wayground.com/play-api/v4/proceedGame')) {
+            return originalFetch.call(this, url, options).then(response => {
+                if (response.ok) {
+                    return response.clone().json().then(data => {
+                        console.log('ProceedGame response:', data);
+                        if (data.response && data.response.result === 'CORRECT' && data.question && data.question.structure && data.question.structure.answer !== undefined) {
+                            const questionId = data.response.questionId;
+                            const correctAnswer = data.question.structure.answer;
+                            console.log('Sending correct answer to server:', questionId, correctAnswer);
+                            sendAnswerToServer(questionId, correctAnswer);
+                        }
+                        return response;
+                    }).catch(() => response);
+                }
+                return response;
+            });
+        }
+
+        return originalFetch.call(this, url, options);
+    };
+
     // === DOMAIN DETECTION AND INITIALIZATION ===
     const initializeDomainSpecific = () => {
         const hostname = window.location.hostname;
@@ -856,7 +1220,8 @@ Please perform the following:
     const main = () => {
         createToggleButton();
         initializeDomainSpecific();
-        GM_log(`Universal Educational Tool Suite loaded on ${sharedState.currentDomain}`);
+        GM_log(`UETS loaded on ${sharedState.currentDomain}`);
+        GM_log(`Made by Nyx (with the slight help of GH Copilot)`);
     };
 
     if (document.body) {
