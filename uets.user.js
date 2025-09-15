@@ -19,9 +19,6 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_registerMenuCommand
 // @grant        GM_setClipboard
-// @connect      media.quizizz.com
-// @connect      generativelanguage.googleapis.com
-// @connect      localhost:5000
 // @connect      *
 // @downloadURL  https://raw.githubusercontent.com/nyxiereal/userfiles/master/uets.user.js
 // @updateURL    https://raw.githubusercontent.com/nyxiereal/userfiles/master/uets.user.js
@@ -35,6 +32,25 @@
   const GEMINI_MODEL = "gemini-2.5-flash";
   const UI_MODS_ENABLED_KEY = "uets_ui_modifications_enabled";
   const SERVER_URL = "http://localhost:5000";
+  // Add config storage keys
+  const CONFIG_STORAGE_KEY = "UETS_CONFIG";
+  const DEFAULT_CONFIG = {
+    enableTimeTakenEdit: true,
+    timeTakenMin: 5067,
+    timeTakenMax: 7067,
+    enableTimerHijack: false,
+    timerBonusPoints: 270,
+    enableSpoofFullscreen: true,
+    serverUrl: "http://localhost:5000",
+    geminiApiKey: "",
+    geminiModel: "gemini-2.5-flash",
+    thinkingBudget: 256,
+    maxOutputTokens: 1024,
+    temperature: 0.2,
+    topP: 0.95,
+    topK: 40,
+    includeImages: true
+  };
 
   // === SHARED STATE ===
   const sharedState = {
@@ -48,6 +64,9 @@
     quizData: {},
     currentQuestionId: null,
     questionsPool: {}, // Add this to store all questions with their options
+    config: GM_getValue(CONFIG_STORAGE_KEY, DEFAULT_CONFIG),
+    configGui: null,
+    holdTimeout: null
   };
 
   // === SHARED STYLES ===
@@ -146,12 +165,300 @@
         font-size: 0.9em;
         text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
     }
+
+    .uets-config-gui {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        background-color: #1a202c; color: #e2e8f0; border: 2px solid #4a5568;
+        border-radius: 12px; padding: 25px; z-index: 10003; width: 500px;
+        max-height: 80vh; overflow-y: auto;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .uets-config-header {
+        display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #4a5568;
+    }
+    .uets-config-title { font-size: 1.4em; font-weight: bold; color: #cbd5e0; }
+    .uets-config-close {
+        background: none; border: none; font-size: 2em; line-height: 1;
+        cursor: pointer; color: #a0aec0; padding: 0 8px;
+    }
+    .uets-config-close:hover { color: #cbd5e0; }
+    .uets-config-section {
+        margin-bottom: 20px; padding: 15px; background-color: #2d3748;
+        border-radius: 8px; border-left: 4px solid #4299e1;
+    }
+    .uets-config-section-title {
+        font-size: 1.1em; font-weight: 600; margin-bottom: 10px; color: #cbd5e0;
+    }
+    .uets-config-item {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 12px; padding: 8px 0;
+    }
+    .uets-config-label {
+        font-size: 0.95em; color: #a0aec0; flex: 1; margin-right: 15px;
+    }
+    .uets-config-input {
+        background-color: #4a5568; border: 1px solid #718096; border-radius: 4px;
+        padding: 6px 10px; color: #e2e8f0; font-size: 0.9em; width: 120px;
+    }
+    .uets-config-input:focus {
+        outline: none; border-color: #4299e1; box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+    }
+    .uets-config-checkbox {
+        width: 18px; height: 18px; accent-color: #4299e1;
+    }
+    .uets-config-buttons {
+        display: flex; justify-content: space-between; margin-top: 25px;
+        padding-top: 15px; border-top: 1px solid #4a5568;
+    }
+    .uets-config-button {
+        padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer;
+        font-size: 0.95em; font-weight: 500; transition: all 0.2s;
+    }
+    .uets-config-save {
+        background-color: #48bb78; color: white;
+    }
+    .uets-config-save:hover { background-color: #38a169; }
+    .uets-config-reset {
+        background-color: #f56565; color: white;
+    }
+    .uets-config-reset:hover { background-color: #e53e3e; }
+    .uets-config-cancel {
+        background-color: #718096; color: white;
+    }
+    .uets-config-cancel:hover { background-color: #4a5568; }
   `);
+
+  // === SHARED UTILITIES ===
+  const createButton = (text, className, onClick) => {
+    const button = document.createElement("button");
+    button.textContent = text;
+    button.classList.add(...className.split(" "));
+    button.onclick = onClick;
+    return button;
+  };
+
+  const createLink = (text, href, className, onClick) => {
+    const link = document.createElement("a");
+    link.textContent = text;
+    link.href = href;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.classList.add(...className.split(" "));
+    if (onClick) link.onclick = onClick;
+    return link;
+  };
+
+  const addQuestionButtons = (
+    container,
+    questionText,
+    options,
+    imageUrl,
+    platform,
+    includeGetAnswer = false,
+    ddgText = "DDG",
+  ) => {
+    const buttonsContainer = document.createElement("div");
+    buttonsContainer.classList.add("uets-main-question-buttons-container");
+    sharedState.elementsToCleanup.push(buttonsContainer);
+
+    const ddgLink = createLink(
+      ddgText,
+      `https://duckduckgo.com/?q=${encodeURIComponent(questionText || "question")}`,
+      "uets-ddg-link uets-ddg-link-main-question",
+    );
+    buttonsContainer.appendChild(ddgLink);
+
+    const copyPromptButton = createButton(
+      "Copy Prompt",
+      "uets-copy-prompt-button uets-copy-prompt-button-main-question",
+      async () => {
+        const prompt = buildGeminiPrompt(
+          questionText || "(See attached image)",
+          options,
+          !!imageUrl,
+          platform,
+        );
+        try {
+          await navigator.clipboard.writeText(prompt);
+          copyPromptButton.textContent = "Copied!";
+          setTimeout(
+            () => (copyPromptButton.textContent = "Copy Prompt"),
+            2000,
+          );
+        } catch (err) {
+          alert("Failed to copy prompt.");
+        }
+      },
+    );
+    buttonsContainer.appendChild(copyPromptButton);
+
+    const geminiButton = createButton(
+      "Ask AI",
+      "uets-gemini-button uets-gemini-button-main-question",
+      async () => {
+        let imageData = null;
+        if (imageUrl && sharedState.config.includeImages) {
+          try {
+            imageData = await fetchImageAsBase64(imageUrl);
+          } catch (error) {
+            showResponsePopup(
+              `Failed to fetch image: ${error}\nProceeding with text only.`,
+            );
+          }
+        }
+        askGemini(
+          questionText || "(See attached image)",
+          options,
+          imageData,
+          platform,
+        );
+      },
+    );
+    buttonsContainer.appendChild(geminiButton);
+
+    if (includeGetAnswer) {
+      const getAnswerButton = createButton(
+        "Get Answer",
+        "uets-get-answer-button",
+        async () => {
+          const questionData =
+            sharedState.quizData[sharedState.currentQuestionId];
+          if (questionData) {
+            const response = await sendQuestionToServer(
+              sharedState.currentQuestionId,
+              questionData.type,
+              questionData.structure.options
+                ? questionData.structure.options.map((opt) => opt.id)
+                : [],
+            );
+            if (response && response.hasAnswer) {
+              console.log("Received answer from server:", response);
+              highlightCorrectAnswers(
+                response.correctAnswers,
+                response.questionType,
+              );
+            } else {
+              showResponsePopup("No answer available yet.");
+            }
+          } else {
+            showResponsePopup("Question data not found.");
+          }
+        },
+      );
+      buttonsContainer.appendChild(getAnswerButton);
+    }
+
+    container.appendChild(buttonsContainer);
+  };
+
+  const processProceedGameRequest = (data) => {
+    if (data.response && data.response.timeTaken !== undefined && sharedState.config.enableTimeTakenEdit) {
+      const timetakenforce =
+        Math.floor(Math.random() * (sharedState.config.timeTakenMax - sharedState.config.timeTakenMin + 1)) + sharedState.config.timeTakenMin;
+      console.log(
+        `Changing timeTaken from ${data.response.timeTaken} to ${timetakenforce}`,
+      );
+      data.response.timeTaken = timetakenforce;
+
+      if (sharedState.config.enableTimerHijack) {
+        console.log(data.response.provisional.scoreBreakups.correct.timer);
+        data.response.provisional.scoreBreakups.correct.timer = sharedState.config.timerBonusPoints;
+        data.response.provisional.scoreBreakups.correct.total = sharedState.config.timerBonusPoints + data.response.provisional.scoreBreakups.correct.base + data.response.provisional.scoreBreakups.correct.streak;
+        data.response.provisional.scores.correct = sharedState.config.timerBonusPoints + data.response.provisional.scoreBreakups.correct.base + data.response.provisional.scoreBreakups.correct.streak;
+      }
+      console.log("Modified proceedGame request data:", data);
+    }
+    return data;
+  };
+
+  const processProceedGameResponse = (data) => {
+    if (
+      data.response &&
+      data.response.result === "CORRECT" &&
+      data.question &&
+      data.question.structure &&
+      data.question.structure.answer !== undefined
+    ) {
+      const questionId = data.response.questionId;
+      let correctAnswer = data.question.structure.answer;
+      if (correctAnswer == 0 && data.question.structure.options !== undefined) {
+        correctAnswer = data.question.structure.options[0].text;
+      }
+      console.log("Correct answer:", correctAnswer);
+      console.log(
+        "Sending correct answer to server:",
+        questionId,
+        correctAnswer,
+      );
+      sendAnswerToServer(questionId, correctAnswer);
+    }
+  };
+
+  // === SPOOF FULLSCREEN AND FOCUS ===
+  const spoofFullscreenAndFocus = () => {
+    // Spoof fullscreen properties
+    Object.defineProperty(document, "fullscreenElement", {
+      get: () => document.documentElement,
+      configurable: true,
+    });
+    Object.defineProperty(document, "fullscreen", {
+      get: () => true,
+      configurable: true,
+    });
+
+    // Spoof focus properties - hasFocus is a method
+    Object.defineProperty(document, "hasFocus", {
+      value: () => true,
+      writable: true,
+      configurable: true,
+    });
+
+    // Override window.focus to do nothing
+    const originalFocus = window.focus;
+    window.focus = () => {
+      // Simulate focus without actually focusing
+    };
+
+    // Spoof visibility state
+    Object.defineProperty(document, "visibilityState", {
+      get: () => "visible",
+      configurable: true,
+    });
+
+    // Prevent visibilitychange events from firing or handle them
+    const originalDispatchEvent = document.dispatchEvent;
+    document.dispatchEvent = function (event) {
+      if (event.type === "visibilitychange") {
+        // Suppress or modify visibilitychange events
+        return true;
+      }
+      return originalDispatchEvent.call(this, event);
+    };
+
+    // Remove toast manager to prevent spam
+    const removeToastManager = () => {
+      const toastManager = document.querySelector(".toast-manager");
+      if (toastManager) toastManager.remove();
+    };
+
+    // Observe for toast manager
+    const toastObserver = new MutationObserver(() => {
+      removeToastManager();
+    });
+    toastObserver.observe(document.body, { childList: true, subtree: true });
+
+    // Initial check
+    removeToastManager();
+
+    GM_log("Fullscreen and focus spoofing enabled.");
+  };
 
   // === SERVER COMMUNICATION ===
   const sendQuestionToServer = async (questionId, questionType, answerIds) => {
     try {
-      const response = await fetch(`${SERVER_URL}/api/question`, {
+      const response = await fetch(`${sharedState.config.serverUrl}/api/question`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ questionId, questionType, answerIds }),
@@ -165,7 +472,7 @@
 
   const sendAnswerToServer = async (questionId, correctAnswers) => {
     try {
-      const response = await fetch(`${SERVER_URL}/api/answer`, {
+      const response = await fetch(`${sharedState.config.serverUrl}/api/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ questionId, correctAnswers }),
@@ -288,26 +595,196 @@
     showResponsePopup(content, false, "Correct Answers");
   };
 
+  // === CONFIG MANAGEMENT ===
+  const saveConfig = () => {
+    GM_setValue(CONFIG_STORAGE_KEY, sharedState.config);
+    GM_setValue(GEMINI_API_KEY_STORAGE, sharedState.config.geminiApiKey);
+  };
+
+  const resetConfig = () => {
+    sharedState.config = { ...DEFAULT_CONFIG };
+    saveConfig();
+  };
+
+  const createConfigGui = () => {
+    if (sharedState.configGui) return;
+
+    const gui = document.createElement('div');
+    gui.className = 'uets-config-gui';
+
+    gui.innerHTML = `
+      <div class="uets-config-header">
+        <span class="uets-config-title">UETS Configuration</span>
+        <button class="uets-config-close">×</button>
+      </div>
+      
+      <div class="uets-config-section">
+        <div class="uets-config-section-title">Wayground/Quizizz Settings</div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">Edit timeTaken values</label>
+          <input type="checkbox" class="uets-config-checkbox" id="enableTimeTakenEdit">
+        </div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">TimeTaken Min (ms)</label>
+          <input type="number" class="uets-config-input" id="timeTakenMin" min="1000" max="60000">
+        </div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">TimeTaken Max (ms)</label>
+          <input type="number" class="uets-config-input" id="timeTakenMax" min="1000" max="60000">
+        </div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">Hijack timer for bonus points</label>
+          <input type="checkbox" class="uets-config-checkbox" id="enableTimerHijack">
+        </div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">Timer bonus points</label>
+          <input type="number" class="uets-config-input" id="timerBonusPoints" min="0" max="5000">
+        </div>
+      </div>
+
+      <div class="uets-config-section">
+        <div class="uets-config-section-title">General Settings</div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">Enable fullscreen spoofing</label>
+          <input type="checkbox" class="uets-config-checkbox" id="enableSpoofFullscreen">
+        </div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">Server URL</label>
+          <input type="text" class="uets-config-input" id="serverUrl" style="width: 200px;">
+        </div>
+      </div>
+
+      <div class="uets-config-section">
+        <div class="uets-config-section-title">Gemini AI Settings</div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">API Key</label>
+          <input type="password" class="uets-config-input" id="geminiApiKey" style="width: 200px;">
+        </div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">Model</label>
+          <input type="text" class="uets-config-input" id="geminiModel" style="width: 150px;">
+        </div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">Include images in prompts</label>
+          <input type="checkbox" class="uets-config-checkbox" id="includeImages">
+        </div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">Thinking Budget</label>
+          <input type="number" class="uets-config-input" id="thinkingBudget" min="0" max="2048">
+        </div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">Max Output Tokens</label>
+          <input type="number" class="uets-config-input" id="maxOutputTokens" min="1" max="8192">
+        </div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">Temperature</label>
+          <input type="number" class="uets-config-input" id="temperature" min="0" max="2" step="0.1">
+        </div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">Top P</label>
+          <input type="number" class="uets-config-input" id="topP" min="0" max="1" step="0.05">
+        </div>
+        <div class="uets-config-item">
+          <label class="uets-config-label">Top K</label>
+          <input type="number" class="uets-config-input" id="topK" min="1" max="100">
+        </div>
+      </div>
+
+      <div class="uets-config-buttons">
+        <button class="uets-config-button uets-config-save">Save</button>
+        <button class="uets-config-button uets-config-reset">Reset to Defaults</button>
+        <button class="uets-config-button uets-config-cancel">Cancel</button>
+      </div>
+    `;
+
+    // Populate current values
+    const populateValues = () => {
+      document.getElementById('enableTimeTakenEdit').checked = sharedState.config.enableTimeTakenEdit;
+      document.getElementById('timeTakenMin').value = sharedState.config.timeTakenMin;
+      document.getElementById('timeTakenMax').value = sharedState.config.timeTakenMax;
+      document.getElementById('enableTimerHijack').checked = sharedState.config.enableTimerHijack;
+      document.getElementById('timerBonusPoints').value = sharedState.config.timerBonusPoints;
+      document.getElementById('enableSpoofFullscreen').checked = sharedState.config.enableSpoofFullscreen;
+      document.getElementById('serverUrl').value = sharedState.config.serverUrl;
+      document.getElementById('geminiApiKey').value = sharedState.config.geminiApiKey;
+      document.getElementById('geminiModel').value = sharedState.config.geminiModel;
+      document.getElementById('includeImages').checked = sharedState.config.includeImages;
+      document.getElementById('thinkingBudget').value = sharedState.config.thinkingBudget;
+      document.getElementById('maxOutputTokens').value = sharedState.config.maxOutputTokens;
+      document.getElementById('temperature').value = sharedState.config.temperature;
+      document.getElementById('topP').value = sharedState.config.topP;
+      document.getElementById('topK').value = sharedState.config.topK;
+    };
+
+    // Event handlers
+    gui.querySelector('.uets-config-close').onclick = () => closeConfigGui();
+    gui.querySelector('.uets-config-cancel').onclick = () => closeConfigGui();
+
+    gui.querySelector('.uets-config-save').onclick = () => {
+      // Collect values
+      sharedState.config.enableTimeTakenEdit = document.getElementById('enableTimeTakenEdit').checked;
+      sharedState.config.timeTakenMin = parseInt(document.getElementById('timeTakenMin').value);
+      sharedState.config.timeTakenMax = parseInt(document.getElementById('timeTakenMax').value);
+      sharedState.config.enableTimerHijack = document.getElementById('enableTimerHijack').checked;
+      sharedState.config.timerBonusPoints = parseInt(document.getElementById('timerBonusPoints').value);
+      sharedState.config.enableSpoofFullscreen = document.getElementById('enableSpoofFullscreen').checked;
+      sharedState.config.serverUrl = document.getElementById('serverUrl').value;
+      sharedState.config.geminiApiKey = document.getElementById('geminiApiKey').value;
+      sharedState.config.geminiModel = document.getElementById('geminiModel').value;
+      sharedState.config.includeImages = document.getElementById('includeImages').checked;
+      sharedState.config.thinkingBudget = parseInt(document.getElementById('thinkingBudget').value);
+      sharedState.config.maxOutputTokens = parseInt(document.getElementById('maxOutputTokens').value);
+      sharedState.config.temperature = parseFloat(document.getElementById('temperature').value);
+      sharedState.config.topP = parseFloat(document.getElementById('topP').value);
+      sharedState.config.topK = parseInt(document.getElementById('topK').value);
+
+      saveConfig();
+      closeConfigGui();
+      alert('Configuration saved!');
+    };
+
+    gui.querySelector('.uets-config-reset').onclick = () => {
+      if (confirm('Reset all settings to defaults?')) {
+        resetConfig();
+        populateValues();
+      }
+    };
+
+    document.body.appendChild(gui);
+    sharedState.configGui = gui;
+    populateValues();
+  };
+
+  const closeConfigGui = () => {
+    if (sharedState.configGui) {
+      sharedState.configGui.remove();
+      sharedState.configGui = null;
+    }
+  };
+
   // === SHARED API KEY MANAGEMENT ===
   GM_registerMenuCommand("Set Gemini API Key", () => {
     const currentKey = GM_getValue(GEMINI_API_KEY_STORAGE, "");
     const newKey = prompt("Enter your Gemini API Key:", currentKey);
     if (newKey !== null) {
       GM_setValue(GEMINI_API_KEY_STORAGE, newKey.trim());
+      sharedState.config.geminiApiKey = newKey.trim();
       GM_log("Gemini API Key updated.");
       alert("Gemini API Key saved!");
     }
   });
 
   const getApiKey = async () => {
-    let apiKey = GM_getValue(GEMINI_API_KEY_STORAGE, null);
+    let apiKey = sharedState.config.geminiApiKey || GM_getValue(GEMINI_API_KEY_STORAGE, null);
     if (!apiKey || apiKey.trim() === "") {
       apiKey = prompt("Gemini API Key not set. Please enter your API Key:");
       if (apiKey && apiKey.trim() !== "") {
+        sharedState.config.geminiApiKey = apiKey.trim();
         GM_setValue(GEMINI_API_KEY_STORAGE, apiKey.trim());
+        saveConfig();
         return apiKey.trim();
       } else {
-        alert("Gemini API Key is required. Set it via the Tampermonkey menu.");
+        alert("Gemini API Key is required. Set it via the configuration or Tampermonkey menu.");
         return null;
       }
     }
@@ -388,10 +865,10 @@ Please perform the following:
       !!imageData,
       platform,
     );
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${sharedState.config.geminiModel}:generateContent?key=${apiKey}`;
 
     const requestPayloadContents = [{ parts: [{ text: promptText }] }];
-    if (imageData && imageData.base64Data && imageData.mimeType) {
+    if (sharedState.config.includeImages && imageData && imageData.base64Data && imageData.mimeType) {
       requestPayloadContents[0].parts.push({
         inline_data: {
           mime_type: imageData.mimeType,
@@ -402,7 +879,15 @@ Please perform the following:
 
     const apiPayload = {
       contents: requestPayloadContents,
-      generationConfig: { temperature: 0.2, topP: 0.95, topK: 40 },
+      generationConfig: {
+        temperature: sharedState.config.temperature,
+        topP: sharedState.config.topP,
+        topK: sharedState.config.topK,
+        maxOutputTokens: sharedState.config.maxOutputTokens,
+        thinkingConfig: {
+          thinkingBudget: sharedState.config.thinkingBudget,
+        },
+      },
       safetySettings: [
         {
           category: "HARM_CATEGORY_HARASSMENT",
@@ -623,7 +1108,36 @@ Please perform the following:
     sharedState.toggleButton = document.createElement("button");
     sharedState.toggleButton.id = "uets-toggle-ui-button";
     updateToggleButtonAppearance();
-    sharedState.toggleButton.addEventListener("click", handleToggleUiClick);
+
+    // Handle click and hold for config
+    sharedState.toggleButton.addEventListener("mousedown", () => {
+      sharedState.holdTimeout = setTimeout(() => {
+        createConfigGui();
+      }, 3000);
+    });
+
+    sharedState.toggleButton.addEventListener("mouseup", () => {
+      if (sharedState.holdTimeout) {
+        clearTimeout(sharedState.holdTimeout);
+        sharedState.holdTimeout = null;
+      }
+    });
+
+    sharedState.toggleButton.addEventListener("mouseleave", () => {
+      if (sharedState.holdTimeout) {
+        clearTimeout(sharedState.holdTimeout);
+        sharedState.holdTimeout = null;
+      }
+    });
+
+    sharedState.toggleButton.addEventListener("click", (e) => {
+      if (sharedState.holdTimeout) {
+        clearTimeout(sharedState.holdTimeout);
+        sharedState.holdTimeout = null;
+        handleToggleUiClick();
+      }
+    });
+
     document.body.appendChild(sharedState.toggleButton);
   };
 
@@ -651,14 +1165,6 @@ Please perform the following:
         clearTimeout(timeout);
         timeout = setTimeout(() => func(...args), wait);
       };
-    },
-
-    createButton: (text, className, onClick) => {
-      const button = document.createElement("button");
-      button.textContent = text;
-      button.classList.add(...className.split(" "));
-      button.onclick = onClick;
-      return button;
     },
 
     getCurrentQuestionId: () => {
@@ -734,106 +1240,30 @@ Please perform the following:
         quizizzModule.selectors.questionContainer,
       );
 
+      // Extract options first
+      const optionButtons = document.querySelectorAll(
+        quizizzModule.selectors.optionButtons,
+      );
+      optionButtons.forEach((button) => {
+        const text = button
+          .querySelector(quizizzModule.selectors.optionText)
+          ?.textContent.trim();
+        if (text) optionTexts.push(text);
+      });
+
       if (questionTitleTextElement && questionTextOuterContainer) {
         questionTitle = questionTitleTextElement.textContent.trim();
 
-        if (questionTitle || questionImageUrl) {
-          const buttonsContainer = document.createElement("div");
-          buttonsContainer.classList.add(
-            "uets-main-question-buttons-container",
+        if (questionTitle || questionImageUrl || optionTexts.length > 0) {
+          addQuestionButtons(
+            questionTextOuterContainer,
+            questionTitle,
+            optionTexts,
+            questionImageUrl,
+            "quiz",
+            true,
+            "DDG",
           );
-          sharedState.elementsToCleanup.push(buttonsContainer);
-
-          const ddgQLink = document.createElement("a");
-          ddgQLink.href = `https://duckduckgo.com/?q=${encodeURIComponent(questionTitle || "quiz question")}`;
-          ddgQLink.textContent = "DDG Q";
-          ddgQLink.target = "_blank";
-          ddgQLink.rel = "noopener noreferrer";
-          ddgQLink.classList.add(
-            "uets-ddg-link",
-            "uets-ddg-link-main-question",
-          );
-          buttonsContainer.appendChild(ddgQLink);
-
-          const copyPromptButton = quizizzModule.createButton(
-            "Copy Prompt",
-            "uets-copy-prompt-button uets-copy-prompt-button-main-question",
-            async () => {
-              const prompt = buildGeminiPrompt(
-                questionTitle || "(See attached image)",
-                optionTexts,
-                !!questionImageUrl,
-                "quiz",
-              );
-              try {
-                await navigator.clipboard.writeText(prompt);
-                copyPromptButton.textContent = "Copied!";
-                setTimeout(
-                  () => (copyPromptButton.textContent = "Copy Prompt"),
-                  2000,
-                );
-              } catch (err) {
-                alert("Failed to copy prompt.");
-              }
-            },
-          );
-          buttonsContainer.appendChild(copyPromptButton);
-
-          const geminiButton = quizizzModule.createButton(
-            "Ask AI",
-            "uets-gemini-button uets-gemini-button-main-question",
-            async () => {
-              let imageData = null;
-              if (questionImageUrl) {
-                try {
-                  imageData = await fetchImageAsBase64(questionImageUrl);
-                } catch (error) {
-                  showResponsePopup(
-                    `Failed to fetch image: ${error}\nProceeding with text only.`,
-                  );
-                }
-              }
-              askGemini(
-                questionTitle || "(See attached image)",
-                optionTexts,
-                imageData,
-                "quiz",
-              );
-            },
-          );
-          buttonsContainer.appendChild(geminiButton);
-
-          const getAnswerButton = quizizzModule.createButton(
-            "Get Answer",
-            "uets-get-answer-button",
-            async () => {
-              const questionData =
-                sharedState.quizData[sharedState.currentQuestionId];
-              if (questionData) {
-                const response = await sendQuestionToServer(
-                  sharedState.currentQuestionId,
-                  questionData.type,
-                  questionData.structure.options
-                    ? questionData.structure.options.map((opt) => opt.id)
-                    : [],
-                );
-                if (response && response.hasAnswer) {
-                  console.log("Received answer from server:", response);
-                  highlightCorrectAnswers(
-                    response.correctAnswers,
-                    response.questionType,
-                  );
-                } else {
-                  showResponsePopup("No answer available yet.");
-                }
-              } else {
-                showResponsePopup("Question data not found.");
-              }
-            },
-          );
-          buttonsContainer.appendChild(getAnswerButton);
-
-          questionTextOuterContainer.appendChild(buttonsContainer);
         }
       }
     },
@@ -972,48 +1402,18 @@ Please perform the following:
       }
 
       const imageUrl = questionImageElement ? questionImageElement.src : null;
-      const buttonContainer = document.createElement("span");
-      buttonContainer.style.marginLeft = "15px";
-      buttonContainer.classList.add("uets-multitool-button-container");
 
-      const aiButton = document.createElement("button");
-      aiButton.textContent = "Ask AI";
-      aiButton.title = "Analyze question with AI";
-      aiButton.classList.add(
-        "uets-gemini-button",
-        "uets-gemini-button-main-question",
-      );
-      aiButton.onclick = async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        let imageData = null;
-        if (imageUrl) {
-          try {
-            imageData = await fetchImageAsBase64(imageUrl);
-          } catch (error) {
-            // Continue without image
-          }
-        }
-        askGemini(questionTextContent, options, imageData, "test");
-      };
-      buttonContainer.appendChild(aiButton);
-
-      const ddgButton = document.createElement("button");
-      ddgButton.textContent = "DDG";
-      ddgButton.title = "Search this question on DuckDuckGo";
-      ddgButton.classList.add("uets-ddg-link", "uets-ddg-link-main-question");
-      ddgButton.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        window.open(
-          `https://duckduckgo.com/?q=${encodeURIComponent(questionTextContent)}`,
-          "_blank",
+      if (questionTextContent || imageUrl || options.length > 0) {
+        addQuestionButtons(
+          qEssenceEl,
+          questionTextContent,
+          options,
+          imageUrl,
+          "test",
+          false,
+          "DDG",
         );
-      };
-      buttonContainer.appendChild(ddgButton);
-
-      qEssenceEl.appendChild(buttonContainer);
-      sharedState.elementsToCleanup.push(buttonContainer);
+      }
 
       qEssenceEl.dataset.enhancementsAdded = "true";
     },
@@ -1209,24 +1609,27 @@ Please perform the following:
         const headingContainer = block.querySelector('div[role="heading"]');
         if (!headingContainer) return;
 
-        const copyButton = document.createElement("button");
-        copyButton.textContent = "Copy";
-        copyButton.className = "gform-copy-button";
-        copyButton.onclick = googleFormsModule.handleCopyClick;
+        const copyButton = createButton(
+          "Copy",
+          "gform-copy-button",
+          googleFormsModule.handleCopyClick,
+        );
         headingContainer.appendChild(copyButton);
         sharedState.elementsToCleanup.push(copyButton);
 
-        const aiButton = document.createElement("button");
-        aiButton.textContent = "Ask AI";
-        aiButton.classList.add("uets-ai-button");
-        aiButton.onclick = googleFormsModule.handleAiClick;
+        const aiButton = createButton(
+          "Ask AI",
+          "uets-ai-button",
+          googleFormsModule.handleAiClick,
+        );
         headingContainer.appendChild(aiButton);
         sharedState.elementsToCleanup.push(aiButton);
 
-        const ddgButton = document.createElement("button");
-        ddgButton.textContent = "DDG";
-        ddgButton.classList.add("uets-ddg-button");
-        ddgButton.onclick = googleFormsModule.handleDdgClick;
+        const ddgButton = createButton(
+          "DDG",
+          "uets-ddg-button",
+          googleFormsModule.handleDdgClick,
+        );
         headingContainer.appendChild(ddgButton);
         sharedState.elementsToCleanup.push(ddgButton);
       });
@@ -1290,6 +1693,14 @@ Please perform the following:
 
     if (
       typeof url === "string" &&
+      url.includes("https://game.wayground.com/play-api/createTestGameActivity")
+    ) {
+      this._blocked = true;
+      GM_log("Blocked cheating detection request to createTestGameActivity");
+    }
+
+    if (
+      typeof url === "string" &&
       (url.includes("https://game.wayground.com/play-api/v4/soloJoin") ||
         url.includes("https://game.wayground.com/play-api/v6/rejoinGame") ||
         url.includes("https://game.wayground.com/play-api/v5/join"))
@@ -1310,33 +1721,12 @@ Please perform the following:
       typeof url === "string" &&
       url.includes("https://game.wayground.com/play-api/v4/proceedGame")
     ) {
-      this.addEventListener("readystatechange", function () {
-        if (this.readyState === 4 && this.status === 200) {
+      this.addEventListener("load", function () {
+        if (this.status === 200) {
           try {
             const data = JSON.parse(this.responseText);
             console.log("ProceedGame response:", data);
-            if (
-              data.response &&
-              data.question &&
-              data.question.structure &&
-              data.question.structure.answer !== undefined
-            ) {
-              const questionId = data.response.questionId;
-              var correctAnswer = data.question.structure.answer;
-              if (
-                correctAnswer == 0 &&
-                data.question.structure.options !== undefined
-              ) {
-                var correctAnswer = data.question.structure.options[0].text;
-              }
-              console.log("Correct answer:", correctAnswer);
-              console.log(
-                "Sending correct answer to server:",
-                questionId,
-                correctAnswer,
-              );
-              sendAnswerToServer(questionId, correctAnswer);
-            }
+            processProceedGameResponse(data);
           } catch (e) {
             console.log("Failed to parse proceedGame response:", e);
           }
@@ -1348,6 +1738,12 @@ Please perform the following:
   };
 
   XMLHttpRequest.prototype.send = function (data) {
+    // Block cheating detection requests
+    if (this._blocked) {
+      GM_log("Cheating detection request blocked - not sending data");
+      return;
+    }
+
     // Intercept POST requests to proceedGame and modify timeTaken
     if (
       this._method === "POST" &&
@@ -1356,22 +1752,10 @@ Please perform the following:
     ) {
       if (data) {
         try {
-          const requestData = JSON.parse(data);
+          let requestData = JSON.parse(data);
           console.log("Original proceedGame request:", requestData);
 
-          // Modify timeTaken
-          var timetakenforce =
-            Math.floor(Math.random() * (7067 - 5067 + 1)) + 5067;
-          if (
-            requestData.response &&
-            requestData.response.timeTaken !== undefined
-          ) {
-            console.log(
-              `Changing timeTaken from ${requestData.response.timeTaken} to ${timetakenforce}`,
-            );
-            requestData.response.timeTaken = timetakenforce;
-            requestData.response.attempt = 0; // force attempts to be at 0, MAYBE prevent scores from being lowered
-          }
+          requestData = processProceedGameRequest(requestData);
 
           const modifiedData = JSON.stringify(requestData);
           console.log("Modified proceedGame request:", requestData);
@@ -1414,6 +1798,17 @@ Please perform the following:
 
   const originalFetch = window.fetch;
   window.fetch = function (url, options) {
+    // Block cheating detection requests
+    if (
+      typeof url === "string" &&
+      url.includes("https://game.wayground.com/play-api/createTestGameActivity")
+    ) {
+      GM_log("Blocked cheating detection request to createTestGameActivity");
+      return Promise.resolve(
+        new Response(JSON.stringify({}), { status: 200, statusText: "OK" }),
+      );
+    }
+
     // Intercept POST requests to proceedGame via fetch
     if (
       typeof url === "string" &&
@@ -1423,19 +1818,10 @@ Please perform the following:
       options.body
     ) {
       try {
-        const requestData = JSON.parse(options.body);
+        let requestData = JSON.parse(options.body);
         console.log("Original proceedGame fetch request:", requestData);
 
-        // Modify timeTaken to 4000
-        if (
-          requestData.response &&
-          requestData.response.timeTaken !== undefined
-        ) {
-          console.log(
-            `Changing timeTaken from ${requestData.response.timeTaken} to 4000`,
-          );
-          requestData.response.timeTaken = 4000;
-        }
+        requestData = processProceedGameRequest(requestData);
 
         const modifiedOptions = {
           ...options,
@@ -1481,22 +1867,7 @@ Please perform the following:
             .json()
             .then((data) => {
               console.log("ProceedGame response:", data);
-              if (
-                data.response &&
-                data.response.result === "CORRECT" &&
-                data.question &&
-                data.question.structure &&
-                data.question.structure.answer !== undefined
-              ) {
-                const questionId = data.response.questionId;
-                const correctAnswer = data.question.structure.answer;
-                console.log(
-                  "Sending correct answer to server:",
-                  questionId,
-                  correctAnswer,
-                );
-                sendAnswerToServer(questionId, correctAnswer);
-              }
+              processProceedGameResponse(data);
               return response;
             })
             .catch(() => response);
@@ -1517,12 +1888,18 @@ Please perform the following:
       hostname.includes("wayground.com")
     ) {
       GM_log("Initializing Quizizz/Wayground module");
+      if (sharedState.config.enableSpoofFullscreen) {
+        spoofFullscreenAndFocus();
+      }
       quizizzModule.initialize();
     } else if (
       hostname.includes("testportal.net") ||
       hostname.includes("testportal.pl")
     ) {
       GM_log("Initializing Testportal module");
+      if (sharedState.config.enableSpoofFullscreen) {
+        spoofFullscreenAndFocus();
+      }
       testportalModule.initialize();
     } else if (
       hostname.includes("docs.google.com") &&
@@ -1535,6 +1912,16 @@ Please perform the following:
 
   // === MAIN INITIALIZATION ===
   const main = () => {
+    // Load config on startup
+    const savedConfig = GM_getValue(CONFIG_STORAGE_KEY, null);
+    if (savedConfig) {
+      sharedState.config = { ...DEFAULT_CONFIG, ...savedConfig };
+    }
+    // Sync API key from old storage if config doesn't have it
+    if (!sharedState.config.geminiApiKey) {
+      sharedState.config.geminiApiKey = GM_getValue(GEMINI_API_KEY_STORAGE, "");
+    }
+
     createToggleButton();
     initializeDomainSpecific();
     GM_log(`UETS loaded on ${sharedState.currentDomain}`);
