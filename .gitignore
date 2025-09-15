@@ -5,3 +5,4 @@ uets-server/lib
 uets-server/lib64
 uets-server/CACHEDIR.TAG
 uets-server/pyvenv.cfg
+*.log
