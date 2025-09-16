@@ -46,7 +46,37 @@
     temperature: 0.2,
     topP: 0.95,
     topK: 64,
-    includeImages: true
+    includeImages: true,
+    enableReactionSpam: true,
+    reactionSpamCount: 2,
+    reactionSpamDelay: 100
+  };
+
+  const PROFILES = {
+    "Stealthy": {
+      enableTimeTakenEdit: true,
+      timeTakenMin: 8000,
+      timeTakenMax: 14000,
+      enableTimerHijack: true,
+      timerBonusPoints: 200,
+      enableSpoofFullscreen: true,
+    },
+    "Creator's choice": {
+      enableTimeTakenEdit: true,
+      timeTakenMin: 6000,
+      timeTakenMax: 8000,
+      enableTimerHijack: true,
+      timerBonusPoints: 270,
+      enableSpoofFullscreen: true,
+    },
+    "LMAO": {
+      enableTimeTakenEdit: true,
+      timeTakenMin: 1000,
+      timeTakenMax: 2000,
+      enableTimerHijack: true,
+      timerBonusPoints: 5000,
+      enableSpoofFullscreen: true,
+    },
   };
 
   // === SHARED STATE ===
@@ -65,192 +95,953 @@
     configGui: null,
     holdTimeout: null,
     originalTabLeaveHTML: null,
-    originalStartButtonText: null
+    originalStartButtonText: null,
+    firstRunKey: "UETS_FIRST_RUN"
   };
 
   // === SHARED STYLES ===
   GM_addStyle(`
-    .uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-ai-button, .uets-ddg-button, .uets-get-answer-button {
-        display: inline-block; padding: 5px 8px;
-        color: white; text-decoration: none; border-radius: 4px; font-size: 0.8em;
-        cursor: pointer; text-align: center; vertical-align: middle;
-        transition: opacity 0.2s ease-in-out; border: none;
-    }
-    .uets-ddg-link:hover, .uets-gemini-button:hover, .uets-copy-prompt-button:hover,
-    .uets-ai-button:hover, .uets-ddg-button:hover, .uets-get-answer-button:hover { opacity: 0.85; }
-    .uets-ddg-link, .uets-ddg-button { background-color: #4CAF50; }
-    .uets-gemini-button, .uets-ai-button { background-color: #007bff; }
-    .uets-copy-prompt-button { background-color: #FF9800; }
-    .uets-get-answer-button { background-color: #9C27B0; }
+  @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/icon?family=Material+Icons+Outlined');
 
-    .uets-option-wrapper {
-        display: flex; flex-direction: column; align-items: stretch; justify-content: space-between; height: 100%;
-    }
-    .uets-option-wrapper > button.option {
-        display: flex; flex-direction: column; flex-grow: 1; min-height: 0; width: 100%;
-    }
-    .uets-ddg-link-option-item {
-        width: 100%; box-sizing: border-box; margin-top: 16px; padding: 6px 0; border-radius: 0 0 4px 4px; flex-shrink: 0;
-    }
-    .uets-ddg-link-main-question, .uets-gemini-button-main-question, .uets-copy-prompt-button-main-question {
-      display: inline-block; width: fit-content; margin: 0;
-    }
-    .uets-main-question-buttons-container {
-      display: flex; justify-content: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;
-    }
+  :root {
+    --md-primary: #6750A4;
+    --md-primary-container: #EADDFF;
+    --md-on-primary: #FFFFFF;
+    --md-on-primary-container: #21005D;
+    --md-secondary: #625B71;
+    --md-secondary-container: #E8DEF8;
+    --md-on-secondary: #FFFFFF;
+    --md-on-secondary-container: #1D192B;
+    --md-tertiary: #7D5260;
+    --md-tertiary-container: #FFD8E4;
+    --md-on-tertiary: #FFFFFF;
+    --md-on-tertiary-container: #31111D;
+    --md-surface: #FEF7FF;
+    --md-surface-dim: #DED8E1;
+    --md-surface-bright: #FEF7FF;
+    --md-surface-container-lowest: #FFFFFF;
+    --md-surface-container-low: #F7F2FA;
+    --md-surface-container: #F1ECF4;
+    --md-surface-container-high: #ECE6F0;
+    --md-surface-container-highest: #E6E0E9;
+    --md-on-surface: #1C1B1F;
+    --md-on-surface-variant: #49454F;
+    --md-outline: #79747E;
+    --md-outline-variant: #CAC4D0;
+    --md-error: #B3261E;
+    --md-error-container: #F9DEDC;
+    --md-on-error: #FFFFFF;
+    --md-on-error-container: #410E0B;
+    --md-shadow: #000000;
+  }
 
-    .uets-response-popup {
-      position: fixed; top: 20%; left: 50%; transform: translate(-50%, 0%);
-      background-color: #2d3748; color: #e2e8f0; border: 1px solid #4a5568;
-      border-radius: 8px; padding: 20px; z-index: 10004; min-width: 380px;
-      max-width: 650px; max-height: 80vh; overflow-y: auto;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.35), 0 6px 10px rgba(0,0,0,0.25);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-      font-size: 15px;
-    }
-    .uets-response-popup-header {
-        display: flex; justify-content: space-between; align-items: center;
-        margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #4a5568;
-    }
-    .uets-response-popup-title { font-weight: 600; font-size: 1.2em; color: #a0aec0; }
-    .uets-response-popup-close {
-        background: none; border: none; font-size: 1.9em; line-height: 1;
-        cursor: pointer; color: #a0aec0; padding: 0 5px; transition: color 0.2s ease-in-out;
-    }
-    .uets-response-popup-close:hover { color: #cbd5e0; }
-    .uets-response-popup-content {
-        white-space: pre-wrap; font-size: 1em; line-height: 1.65; color: #cbd5e0;
-    }
-    .uets-response-popup-content strong, .uets-response-popup-content b { color: #e2e8f0; font-weight: 600; }
-    .uets-response-popup-loading {
-        text-align: center; font-style: italic; color: #a0aec0; padding: 25px 0; font-size: 1.05em;
-    }
+  .uets-card {
+    background: var(--md-surface-container);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+    overflow: hidden;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
 
-    #uets-toggle-ui-button {
-        position: fixed; bottom: 15px; left: 15px; z-index: 10002;
-        background-color: #607D8B; border: none; border-radius: 50%;
-        width: 44px; height: 44px; cursor: pointer;
-        box-shadow: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);
-        transition: background-color 0.2s ease-in-out, transform 0.2s ease;
-        user-select: none; padding: 6px; box-sizing: border-box;
-        display: flex; align-items: center; justify-content: center;
-        color: white; font-size: 16px;
-    }
-    #uets-toggle-ui-button:hover { background-color: #546E7A; transform: scale(1.05); }
-    #uets-toggle-ui-button.uets-mods-hidden-state { background-color: transparent; }
-    #uets-toggle-ui-button.uets-mods-hidden-state:hover { background-color: #transparent; }
+  .uets-elevated-card {
+    background: var(--md-surface-container-low);
+    border-radius: 12px;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);
+    overflow: hidden;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
 
-    .gform-copy-button {
-        margin-left: 12px; padding: 2px 8px; font-size: 12px; font-weight: bold;
-        color: #fff; background-color: #1a73e8; border: none; border-radius: 4px;
-        cursor: pointer; vertical-align: middle; transition: background-color 0.2s;
-    }
-    .gform-copy-button:hover { background-color: #287ae6; }
-    .gform-copy-button:disabled { background-color: #8ab4f8; cursor: default; }
+  .uets-filled-button {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    border: none;
+    border-radius: 20px;
+    padding: 10px 24px;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    text-decoration: none;
+    min-height: 40px;
+    justify-content: center;
+  }
 
-    .uets-correct-answer {
-        background-color: rgba(76, 175, 80, 0.3) !important;
-        border: 2px solid #4CAF50 !important;
-    }
-    .uets-answer-indicator {
-        position: absolute; top: 5px; right: 5px; background: #4CAF50;
-        color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px;
-        font-weight: bold; z-index: 1000;
-    }
-    .uets-streak-bonus {
-        margin-left: 5px;
-        color: #FFD700;
-        font-weight: bold;
-        font-size: 0.9em;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-    }
+  .uets-filled-button:hover {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+    transform: translateY(-1px);
+  }
 
-    .uets-config-gui {
-        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        background-color: #1a202c; color: #e2e8f0; border: 2px solid #4a5568;
-        border-radius: 12px; padding: 25px; z-index: 10003; width: 500px;
-        max-height: 80vh; overflow-y: auto;
-        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  .uets-filled-button:active {
+    transform: translateY(0px);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  }
+
+  .uets-outlined-button {
+    background: transparent;
+    color: var(--md-primary);
+    border: 1px solid var(--md-outline);
+    border-radius: 20px;
+    padding: 10px 24px;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    text-decoration: none;
+    min-height: 40px;
+    justify-content: center;
+  }
+
+  .uets-outlined-button:hover {
+    background: rgba(103, 80, 164, 0.08);
+    border-color: var(--md-primary);
+  }
+
+  .uets-text-button {
+    background: transparent;
+    color: var(--md-primary);
+    border: none;
+    border-radius: 20px;
+    padding: 10px 12px;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    text-decoration: none;
+    min-height: 40px;
+    justify-content: center;
+  }
+
+  .uets-text-button:hover {
+    background: rgba(103, 80, 164, 0.08);
+  }
+
+  .uets-fab {
+    background: var(--md-primary-container);
+    color: var(--md-on-primary-container);
+    border: none;
+    border-radius: 16px;
+    width: 56px;
+    height: 56px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 3px 5px rgba(0,0,0,0.2), 0 6px 10px rgba(0,0,0,0.14), 0 1px 18px rgba(0,0,0,0.12);
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    font-size: 24px;
+  }
+
+  .uets-fab:hover {
+    box-shadow: 0 5px 5px rgba(0,0,0,0.2), 0 9px 18px rgba(0,0,0,0.14), 0 3px 14px rgba(0,0,0,0.12);
+    transform: scale(1.05);
+  }
+
+  .uets-fab.uets-mods-hidden-state {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .uets-fab.uets-mods-hidden-state:hover {
+    background: rgba(103, 80, 164, 0.08);
+    box-shadow: none;
+    transform: scale(1.05);
+  }
+
+  .uets-success-button {
+    background: #4CAF50;
+    color: white;
+  }
+
+  .uets-warning-button {
+    background: #FF9800;
+    color: white;
+  }
+
+  .uets-purple-button {
+    background: #9C27B0;
+    color: white;
+  }
+
+  .uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-ai-button, .uets-ddg-button, .uets-get-answer-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    color: var(--md-on-primary);
+    text-decoration: none;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    vertical-align: middle;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    border: none;
+    font-family: 'Roboto', sans-serif;
+    min-height: 40px;
+    justify-content: center;
+  }
+
+  .uets-ddg-link:hover, .uets-gemini-button:hover, .uets-copy-prompt-button:hover,
+  .uets-ai-button:hover, .uets-ddg-button:hover, .uets-get-answer-button:hover {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+    transform: translateY(-1px);
+  }
+
+  .uets-ddg-link, .uets-ddg-button { 
+    background: #4CAF50;
+  }
+
+  .uets-gemini-button, .uets-ai-button { 
+    background: var(--md-primary);
+  }
+
+  .uets-copy-prompt-button { 
+    background: #FF9800;
+  }
+
+  .uets-get-answer-button { 
+    background: #9C27B0;
+  }
+
+  .uets-ddg-link::before, .uets-ddg-button::before {
+    content: 'search';
+    font-family: 'Material Icons Outlined';
+    font-size: 18px;
+  }
+
+  .uets-gemini-button::before, .uets-ai-button::before {
+    content: 'psychology';
+    font-family: 'Material Icons Outlined';
+    font-size: 18px;
+  }
+
+  .uets-copy-prompt-button::before {
+    content: 'content_copy';
+    font-family: 'Material Icons Outlined';
+    font-size: 18px;
+  }
+
+  .uets-get-answer-button::before {
+    content: 'lightbulb';
+    font-family: 'Material Icons Outlined';
+    font-size: 18px;
+  }
+
+  .uets-option-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: space-between;
+    height: 100%;
+  }
+
+  .uets-option-wrapper > button.option {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    min-height: 0;
+    width: 100%;
+  }
+
+  .uets-ddg-link-option-item {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 12px;
+    padding: 8px 0;
+    border-radius: 0 0 12px 12px;
+    flex-shrink: 0;
+  }
+
+  .uets-main-question-buttons-container {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+    padding: 16px;
+    background: var(--md-surface-container-lowest);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+
+  .uets-response-popup {
+    position: fixed;
+    top: 20%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--md-surface-container-high);
+    color: var(--md-on-surface);
+    border-radius: 28px;
+    padding: 0;
+    z-index: 10004;
+    min-width: 320px;
+    max-width: 90vh;
+    max-height: 80vh;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.35), 0 6px 10px rgba(0,0,0,0.25);
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+  }
+
+  .uets-welcome-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--md-surface-container-high);
+    color: var(--md-on-surface);
+    border-radius: 28px;
+    padding: 0;
+    z-index: 10004;
+    min-width: 320px;
+    max-width: 90vh;
+    max-height: 80vh;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.35), 0 6px 10px rgba(0,0,0,0.25);
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-size: 18px;
+  }
+
+  .uets-response-popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24px 24px 0 24px;
+    margin-bottom: 16px;
+  }
+
+  .uets-response-popup-title {
+    font-weight: 600;
+    font-size: 22px;
+    color: var(--md-on-surface);
+    line-height: 28px;
+  }
+
+  .uets-response-popup-close {
+    background: none;
+    border: none;
+    width: 48px;
+    height: 48px;
+    border-radius: 24px;
+    cursor: pointer;
+    color: var(--md-on-surface-variant);
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Material Icons Outlined';
+    font-size: 24px;
+  }
+
+  .uets-response-popup-close::before {
+    content: 'close';
+  }
+
+  .uets-response-popup-close:hover {
+    background: rgba(103, 80, 164, 0.08);
+    color: var(--md-primary);
+  }
+
+  .uets-response-popup-content {
+    white-space: pre-wrap;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--md-on-surface);
+    padding: 0 24px 24px 24px;
+    max-height: calc(80vh - 120px);
+    overflow-y: auto;
+  }
+
+  .uets-response-popup-content strong,
+  .uets-response-popup-content b {
+    color: var(--md-primary);
+    font-weight: 600;
+  }
+
+  .uets-response-popup-loading {
+    text-align: center;
+    font-style: normal;
+    color: var(--md-on-surface-variant);
+    padding: 40px 24px;
+    font-size: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .uets-loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--md-outline-variant);
+    border-top: 3px solid var(--md-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  #uets-toggle-ui-button {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    z-index: 10002;
+    background: var(--md-primary-container);
+    color: var(--md-on-primary-container);
+    border: none;
+    border-radius: 16px;
+    width: 56px;
+    height: 56px;
+    cursor: pointer;
+    box-shadow: 0 3px 5px rgba(0,0,0,0.2), 0 6px 10px rgba(0,0,0,0.14), 0 1px 18px rgba(0,0,0,0.12);
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Material Icons Outlined';
+    font-size: 24px;
+  }
+
+  #uets-toggle-ui-button:hover {
+    box-shadow: 0 5px 5px rgba(0,0,0,0.2), 0 9px 18px rgba(0,0,0,0.14), 0 3px 14px rgba(0,0,0,0.12);
+    transform: scale(1.05);
+  }
+
+  #uets-toggle-ui-button.uets-mods-hidden-state {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  #uets-toggle-ui-button.uets-mods-hidden-state:hover {
+    background: rgba(103, 80, 164, 0.08);
+    box-shadow: none;
+  }
+
+  .gform-copy-button {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    border: none;
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    font-family: 'Roboto', sans-serif;
+    margin-left: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .gform-copy-button::before {
+    content: 'content_copy';
+    font-family: 'Material Icons Outlined';
+    font-size: 16px;
+  }
+
+  .gform-copy-button:hover {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+    transform: translateY(-1px);
+  }
+
+  .gform-copy-button:disabled {
+    background: var(--md-outline-variant);
+    color: var(--md-on-surface-variant);
+    cursor: default;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .uets-correct-answer {
+    background: rgba(76, 175, 80, 0.12) !important;
+    border: 2px solid #4CAF50 !important;
+    border-radius: 12px !important;
+  }
+
+  .uets-answer-indicator {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #4CAF50;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    z-index: 1000;
+    font-family: 'Material Icons Outlined';
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .uets-answer-indicator::before {
+    content: 'check';
+    font-size: 16px;
+  }
+
+  .uets-streak-bonus {
+    margin-left: 8px;
+    color: #FFD700;
+    font-weight: 600;
+    font-size: 14px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+    font-family: 'Roboto', sans-serif;
+  }
+
+  .uets-config-gui {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--md-surface);
+    color: var(--md-on-surface);
+    border-radius: 28px;
+    padding: 0;
+    z-index: 10003;
+    width: 640px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: hidden;
+    box-shadow: 0 24px 38px rgba(0,0,0,0.14), 0 9px 46px rgba(0,0,0,0.12), 0 11px 15px rgba(0,0,0,0.20);
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  .uets-config-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24px 24px 12px 24px;
+    border-bottom: 1px solid var(--md-outline-variant);
+  }
+
+  .uets-config-title {
+    font-size: 24px;
+    font-weight: 400;
+    color: var(--md-on-surface);
+    line-height: 32px;
+    letter-spacing: 0px;
+  }
+
+  .uets-config-close {
+    background: none;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 20px;
+    cursor: pointer;
+    color: var(--md-on-surface-variant);
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Material Icons Outlined';
+    font-size: 20px;
+  }
+
+  .uets-config-close::before {
+    content: 'close';
+  }
+
+  .uets-config-close:hover {
+    background: var(--md-surface-container-highest);
+    color: var(--md-on-surface);
+  }
+
+  .uets-config-content {
+    max-height: calc(90vh - 200px);
+    overflow-y: auto;
+  }
+
+  .uets-config-section {
+    margin-bottom: 8px;
+    padding: 16px 24px;
+  }
+
+  .uets-config-section-title {
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 16px;
+    color: var(--md-primary);
+    line-height: 24px;
+    letter-spacing: 0.1px;
+  }
+
+  .uets-config-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    min-height: 56px;
+  }
+
+  .uets-config-label-container {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    margin-right: 16px;
+  }
+
+  .uets-config-label {
+    font-size: 16px;
+    font-weight: 400;
+    color: var(--md-on-surface);
+    margin-left: 12px;
+    line-height: 24px;
+    letter-spacing: 0.5px;
+  }
+
+  .uets-config-input, .uets-config-select {
+    background: var(--md-surface-container-highest);
+    border: 1px solid var(--md-outline);
+    border-radius: 4px;
+    padding: 16px;
+    color: var(--md-on-surface);
+    font-size: 16px;
+    font-family: 'Roboto', sans-serif;
+    width: 200px;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    box-sizing: border-box;
+  }
+
+  .uets-config-input:focus, .uets-config-select:focus {
+    outline: none;
+    border-color: var(--md-primary);
+    border-width: 2px;
+    padding: 15px;
+  }
+
+  .uets-config-input:disabled {
+    background: var(--md-surface-variant);
+    color: var(--md-on-surface-variant);
+    border-color: var(--md-outline-variant);
+  }
+
+  .uets-switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 32px;
+    cursor: pointer;
+  }
+
+  .uets-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .uets-switch-slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--md-outline);
+    border-radius: 16px;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    border: 2px solid var(--md-outline);
+  }
+
+  .uets-switch-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 4px;
+    bottom: 4px;
+    background: var(--md-surface-container-highest);
+    border-radius: 50%;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+
+  .uets-switch input:checked + .uets-switch-slider {
+    background: var(--md-primary);
+    border-color: var(--md-primary);
+  }
+
+  .uets-switch input:checked + .uets-switch-slider:before {
+    transform: translateX(20px);
+    background: var(--md-on-primary);
+  }
+
+  .uets-switch:hover .uets-switch-slider {
+    box-shadow: 0 0 0 8px rgba(103, 80, 164, 0.04);
+  }
+
+  .uets-switch input:checked:hover + .uets-switch-slider {
+    box-shadow: 0 0 0 8px rgba(103, 80, 164, 0.08);
+  }
+
+  .uets-config-info {
+    background: var(--md-secondary-container);
+    color: var(--md-on-secondary-container);
+    border: none;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Material Icons Outlined';
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    font-weight: 500;
+  }
+
+  .uets-config-info::before {
+    content: 'help';
+    font-size: 20px;
+  }
+
+  .uets-config-info:hover {
+    background: var(--md-secondary);
+    color: var(--md-on-secondary);
+    transform: scale(1.1);
+  }
+
+  .uets-config-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 16px 24px 24px 24px;
+    border-top: 1px solid var(--md-outline-variant);
+    background: var(--md-surface-container-low);
+  }
+
+  .uets-config-button {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: 'Roboto', sans-serif;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    justify-content: center;
+    letter-spacing: 0.1px;
+  }
+
+  .uets-config-save {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+  }
+
+  .uets-config-save::before {
+    content: 'save';
+    font-family: 'Material Icons Outlined';
+    font-size: 18px;
+  }
+
+  .uets-config-save:hover {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+    background: #5a4089;
+  }
+
+  .uets-config-reset {
+    background: var(--md-error);
+    color: var(--md-on-error);
+  }
+
+  .uets-config-reset::before {
+    content: 'refresh';
+    font-family: 'Material Icons Outlined';
+    font-size: 18px;
+  }
+
+  .uets-config-reset:hover {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+    background: #a02117;
+  }
+
+  .uets-config-cancel {
+    background: transparent;
+    color: var(--md-primary);
+    border: 1px solid var(--md-outline);
+  }
+
+  .uets-config-cancel::before {
+    content: 'cancel';
+    font-family: 'Material Icons Outlined';
+    font-size: 18px;
+  }
+
+  .uets-config-cancel:hover {
+    background: var(--md-surface-container-highest);
+    border-color: var(--md-primary);
+  }
+
+  .uets-config-content::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .uets-config-content::-webkit-scrollbar-track {
+    background: var(--md-surface-container-low);
+  }
+
+  .uets-config-content::-webkit-scrollbar-thumb {
+    background: var(--md-outline-variant);
+    border-radius: 4px;
+  }
+
+  .uets-config-content::-webkit-scrollbar-thumb:hover {
+    background: var(--md-outline);
+  }
+
+  .uets-profile-selector {
+    margin: 4px 4px 4px 4px;
+    padding: 16px;
+    background: var(--md-surface-container-low);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+
+  .uets-profile-list {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--md-outline-variant) transparent;
+  }
+
+  .uets-profile-list::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .uets-profile-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .uets-profile-list::-webkit-scrollbar-thumb {
+    background: var(--md-outline-variant);
+    border-radius: 3px;
+  }
+
+  .uets-profile-list::-webkit-scrollbar-thumb:hover {
+    background: var(--md-outline);
+  }
+
+  .uets-profile-button {
+    background: var(--md-surface-container-highest);
+    color: var(--md-on-surface);
+    border: 1px solid var(--md-outline);
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    flex-shrink: 0;
+  }
+
+  .uets-profile-button:hover {
+    background: var(--md-surface-container);
+    border-color: var(--md-primary);
+  }
+
+  .uets-profile-button.active {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    border-color: var(--md-primary);
+  }
+
+  .uets-profile-button.active:hover {
+    background: #5a4089;
+  }
+
+  /* Dark mode overrides */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --md-primary: #D0BCFF;
+      --md-primary-container: #4F378B;
+      --md-on-primary: #371E73;
+      --md-on-primary-container: #EADDFF;
+      --md-secondary: #CCC2DC;
+      --md-secondary-container: #4A4458;
+      --md-on-secondary: #332D41;
+      --md-on-secondary-container: #E8DEF8;
+      --md-tertiary: #EFB8C8;
+      --md-tertiary-container: #633B48;
+      --md-on-tertiary: #492532;
+      --md-on-tertiary-container: #FFD8E4;
+      --md-surface: #141218;
+      --md-surface-dim: #141218;
+      --md-surface-bright: #3B383E;
+      --md-surface-container-lowest: #0F0D13;
+      --md-surface-container-low: #1D1B20;
+      --md-surface-container: #211F26;
+      --md-surface-container-high: #2B2930;
+      --md-surface-container-highest: #36343B;
+      --md-on-surface: #E6E0E9;
+      --md-on-surface-variant: #CAC4D0;
+      --md-outline: #938F99;
+      --md-outline-variant: #49454F;
+      --md-error: #F2B8B5;
+      --md-error-container: #8C1D18;
+      --md-on-error: #601410;
+      --md-on-error-container: #F9DEDC;
+      --md-shadow: #000000;
     }
-    .uets-config-header {
-        display: flex; justify-content: space-between; align-items: center;
-        margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #4a5568;
-    }
-    .uets-config-title { font-size: 1.4em; font-weight: bold; color: #cbd5e0; }
-    .uets-config-close {
-        background: none; border: none; font-size: 2em; line-height: 1;
-        cursor: pointer; color: #a0aec0; padding: 0 8px;
-    }
-    .uets-config-close:hover { color: #cbd5e0; }
-    .uets-config-section {
-        margin-bottom: 20px; padding: 15px; background-color: #2d3748;
-        border-radius: 8px; border-left: 4px solid #4299e1;
-    }
-    .uets-config-section-title {
-        font-size: 1.1em; font-weight: 600; margin-bottom: 10px; color: #cbd5e0;
-    }
-    .uets-config-item {
-        display: flex; align-items: center; justify-content: space-between;
-        margin-bottom: 12px; padding: 8px 0;
-    }
-    .uets-config-label {
-        font-size: 0.95em; color: #a0aec0; flex: 1; margin-right: 15px;
-    }
-    .uets-config-input {
-        background-color: #4a5568; border: 1px solid #718096; border-radius: 4px;
-        padding: 6px 10px; color: #e2e8f0; font-size: 0.9em; width: 120px;
-    }
-    .uets-config-input:focus {
-        outline: none; border-color: #4299e1; box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
-    }
-    .uets-config-checkbox {
-        width: 18px; height: 18px; accent-color: #4299e1;
-    }
-    .uets-config-buttons {
-        display: flex; justify-content: space-between; margin-top: 25px;
-        padding-top: 15px; border-top: 1px solid #4a5568;
-    }
-    .uets-config-button {
-        padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer;
-        font-size: 0.95em; font-weight: 500; transition: all 0.2s;
-    }
-    .uets-config-save {
-        background-color: #48bb78; color: white;
-    }
-    .uets-config-save:hover { background-color: #38a169; }
-    .uets-config-reset {
-        background-color: #f56565; color: white;
-    }
-    .uets-config-reset:hover { background-color: #e53e3e; }
-    .uets-config-cancel {
-        background-color: #718096; color: white;
-    }
-    .uets-config-cancel:hover { background-color: #4a5568; }
-    .uets-config-label-container {
-      display: flex;
-      align-items: center;
-      flex: 1;
-      margin-right: 15px;
-    }
-    .uets-config-label {
-      margin-left: 5px;
-    }
-    .uets-config-info {
-      background: #4299e1;
-      color: white;
-      border: none;
-      border-radius: 50%;
-      width: 20px;
-      height: 20px;
-      font-size: 12px;
-      cursor: pointer;
-      vertical-align: middle;
-    }
-    .uets-config-info:hover {
-      background: #3182ce;
-    }
-  `);
+  }
+`);
+
+  // === WELCOME POPUP FOR NEW USERS ===
+  const showWelcomePopup = () => {
+    if (!sharedState.uiModificationsEnabled) return;
+
+    const popup = document.createElement("div");
+    popup.classList.add("uets-welcome-popup");
+    popup.id = "uets-welcome-popup";
+
+    const header = document.createElement("div");
+    header.classList.add("uets-response-popup-header");
+
+    const title = document.createElement("span");
+    title.classList.add("uets-response-popup-title");
+    title.textContent = "Welcome to UETS!";
+
+    const closeButton = document.createElement("button");
+    closeButton.classList.add("uets-response-popup-close");
+    closeButton.onclick = () => popup.remove();
+
+    header.appendChild(title);
+    header.appendChild(closeButton);
+    popup.appendChild(header);
+
+    const content = document.createElement("div");
+    content.classList.add("uets-response-popup-content");
+    content.innerHTML = `<p>- Press the floating button (bottom-left) to activate/deactivate visual changes on the page.\n- Press and hold the button for 3 seconds to open the settings menu.\n- In the settings, click on the info button on the left side of each option to get some insight into the setting.</p>`;
+    popup.appendChild(content);
+
+    document.body.appendChild(popup);
+  };
 
   // === SHARED UTILITIES ===
   const createButton = (text, className, onClick) => {
@@ -638,134 +1429,187 @@
     gui.className = 'uets-config-gui';
 
     gui.innerHTML = `
-      <div class="uets-config-header">
-        <span class="uets-config-title">UETS Configuration</span>
-        <button class="uets-config-close">×</button>
-      </div>
+  <div class="uets-config-header">
+    <span class="uets-config-title">UETS Configuration</span>
+    <button class="uets-config-close"></button>
+  </div>
 
+  <div class="uets-config-content">
+    <div class="uets-profile-selector">
+      <div class="uets-profile-list">
+        <button class="uets-profile-button" data-profile="Custom">Custom</button>
+        <button class="uets-profile-button" data-profile="Stealthy">Stealthy</button>
+        <button class="uets-profile-button" data-profile="Creator's choice">Creator's choice</button>
+        <button class="uets-profile-button" data-profile="LMAO">LMAO</button>
+      </div>
+    </div>
+
+    <div class="uets-card" style="margin-left: 4px; margin-right: 4px;">
       <div class="uets-config-section">
         <div class="uets-config-section-title">General Settings</div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Makes the website think that it's in fullscreen mode AND focused. Recommended on Testportal and Wayground (if the teacher enabled extra protections)." title="Info">?</button>
+            <button class="uets-config-info" data-info="Makes the website think that it's in fullscreen mode AND focused. Recommended on Testportal and Wayground (if the teacher enabled extra protections)." title="Info"></button>
             <label class="uets-config-label">Fullscreen spoofing</label>
           </div>
-          <input type="checkbox" class="uets-config-checkbox" id="enableSpoofFullscreen">
+          <label class="uets-switch">
+            <input type="checkbox" id="enableSpoofFullscreen">
+            <span class="uets-switch-slider"></span>
+          </label>
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="URL of the server for storing and retrieving answers." title="Info">?</button>
+            <button class="uets-config-info" data-info="URL of the server for storing and retrieving answers." title="Info"></button>
             <label class="uets-config-label">Server URL</label>
           </div>
           <input type="text" class="uets-config-input" id="serverUrl" style="width: 200px;">
         </div>
       </div>
+    </div>
 
+    <div class="uets-card" style="margin-top: 6px; margin-left: 4px; margin-right: 4px;">
       <div class="uets-config-section">
         <div class="uets-config-section-title">Wayground/Quizizz Settings</div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Allows you to spoof the time taken to answer a question. You have 20 seconds to get a ~100-400 point bonus per question, this option forces the site to give you bonus points." title="Info">?</button>
+            <button class="uets-config-info" data-info="Allows you to spoof the time taken to answer a question. You have 20 seconds to get a ~100-400 point bonus per question, this option forces the site to give you bonus points." title="Info"></button>
             <label class="uets-config-label">Hijack timeTaken</label>
           </div>
-          <input type="checkbox" class="uets-config-checkbox" id="enableTimeTakenEdit">
+          <label class="uets-switch">
+            <input type="checkbox" id="enableTimeTakenEdit">
+            <span class="uets-switch-slider"></span>
+          </label>
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Minimum time in milliseconds for randomized time taken. I recommend keeping it between 6000 and 9000. Very low values will alert the teacher." title="Info">?</button>
-            <label class="uets-config-label">^timeTaken min (ms)</label>
+            <button class="uets-config-info" data-info="Minimum time in milliseconds for randomized time taken. I recommend keeping it between 6000 and 9000. Very low values will alert the teacher." title="Info"></button>
+            <label class="uets-config-label">timeTaken min (ms)</label>
           </div>
           <input type="number" class="uets-config-input" id="timeTakenMin" min="100" max="60000">
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Maximum time in milliseconds for randomized time taken. I recommend keeping it between 7000 and 12000. Very low values will alert the teacher." title="Info">?</button>
-            <label class="uets-config-label">^timeTaken max (ms)</label>
+            <button class="uets-config-info" data-info="Maximum time in milliseconds for randomized time taken. I recommend keeping it between 7000 and 12000. Very low values will alert the teacher." title="Info"></button>
+            <label class="uets-config-label">timeTaken max (ms)</label>
           </div>
           <input type="number" class="uets-config-input" id="timeTakenMax" min="100" max="60000">
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Enables timer hijacking, this adds bonus points to your score, I recommend keeping it between 200 and 350 points to seem legitimate." title="Info">?</button>
+            <button class="uets-config-info" data-info="Enables timer hijacking, this adds bonus points to your score, I recommend keeping it between 200 and 350 points to seem legitimate." title="Info"></button>
             <label class="uets-config-label">Hijack timer for points</label>
           </div>
-          <input type="checkbox" class="uets-config-checkbox" id="enableTimerHijack">
+          <label class="uets-switch">
+            <input type="checkbox" id="enableTimerHijack">
+            <span class="uets-switch-slider"></span>
+          </label>
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Timer bonus that you'll recieve if you enable timer hijacking. Values above 6000 are problematic and will cause issues. Maximum value that's guaranteed to work is 5000, but I don't recommend setting it to anything above 350." title="Info">?</button>
-            <label class="uets-config-label">^Timer bonus points</label>
+            <button class="uets-config-info" data-info="Timer bonus that you'll recieve if you enable timer hijacking. Values above 6000 are problematic and will cause issues. Maximum value that's guaranteed to work is 5000, but I don't recommend setting it to anything above 350." title="Info"></button>
+            <label class="uets-config-label">Timer bonus points</label>
           </div>
           <input type="number" class="uets-config-input" id="timerBonusPoints" min="0" max="5000">
         </div>
+        <div class="uets-config-item">
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="DANGER: Enabling this and clicking any reaction will trigger a wave of reactions being shown on the teacher's screen, alongside potentially freezing your browser. If you want to use it, try your best not to get caught." title="Info"></button>
+            <label class="uets-config-label">Enable reaction spam</label>
+          </div>
+          <label class="uets-switch">
+            <input type="checkbox" id="enableReactionSpam">
+            <span class="uets-switch-slider"></span>
+          </label>
+        </div>
+        <div class="uets-config-item">
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="How many reactions should be set per one reaction." title="Info"></button>
+            <label class="uets-config-label">Reaction spam count</label>
+          </div>
+          <input type="number" class="uets-config-input" id="reactionSpamCount" min="0" max="10">
+        </div>
+        <div class="uets-config-item">
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Delay in milliseconds between each resend." title="Info"></button>
+            <label class="uets-config-label">Reaction spam delay (ms)</label>
+          </div>
+          <input type="number" class="uets-config-input" id="reactionSpamDelay" min="50" max="1000">
+        </div>
       </div>
+    </div>
 
+    <div class="uets-card" style="margin-top: 6px; margin-left: 4px; margin-right: 4px;">
       <div class="uets-config-section">
         <div class="uets-config-section-title">Gemini AI Settings</div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Your Gemini API key for AI assistance. You can get it on https://aistudio.google.com/apikey." title="Info">?</button>
+            <button class="uets-config-info" data-info="Your Gemini API key for AI assistance. You can get it on https://aistudio.google.com/apikey." title="Info"></button>
             <label class="uets-config-label">API Key</label>
           </div>
           <input type="password" class="uets-config-input" id="geminiApiKey" style="width: 200px;">
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="The Gemini model to use for AI queries. I recommend using the flash or lite series of models for quick answers." title="Info">?</button>
+            <button class="uets-config-info" data-info="The Gemini model to use for AI queries. I recommend using the flash or lite series of models for quick answers. Breakdown (Requests/min / Tokens/min):\n\n2.5 Pro - Slower responses, costs more tokens, best quality. 5/250k.\n2.5 Flash - Fast responses, lower ratelimit, good quality. 10/250k.\n2.5 Flash-Lite - Fastest responses, lowest ratelimit, okay quality. 15/250k.\n2.0 Flash - Fast responses, lower ratelimit, acceptable quality. 15/1M.\n2.0 Flash-Lite - Fastest responses, lowest ratelimit, acceptable quality. 30/1M." title="Info"></button>
             <label class="uets-config-label">Model</label>
           </div>
-          <select class="uets-config-input" id="geminiModel" style="width: 150px;"><option>Loading models...</option></select>
+          <select class="uets-config-input" id="geminiModel"><option>Loading models...</option></select>
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Whether to include question images in AI prompts." title="Info">?</button>
+            <button class="uets-config-info" data-info="Whether to include question images in AI prompts." title="Info"></button>
             <label class="uets-config-label">Include images</label>
           </div>
-          <input type="checkbox" class="uets-config-checkbox" id="includeImages">
+          <label class="uets-switch">
+            <input type="checkbox" id="includeImages">
+            <span class="uets-switch-slider"></span>
+          </label>
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Budget for thinking in the AI model (0 disables thinking). Can increase output response quality, but increases the waiting time for the answer. I recommend 256 or 512 tokens." title="Info">?</button>
+            <button class="uets-config-info" data-info="Budget for thinking in the AI model (0 disables thinking). Can increase output response quality, but increases the waiting time for the answer. I recommend 256 or 512 tokens." title="Info"></button>
             <label class="uets-config-label">Thinking budget</label>
           </div>
           <input type="number" class="uets-config-input" id="thinkingBudget" min="0" max="4096">
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Maximum number of tokens in AI responses (1-8192). A token is roughly equal to a word, or a punctuation mark." title="Info">?</button>
+            <button class="uets-config-info" data-info="Maximum number of tokens in AI responses (1-8192). A token is roughly equal to a word, or a punctuation mark." title="Info"></button>
             <label class="uets-config-label">Max output tokens</label>
           </div>
           <input type="number" class="uets-config-input" id="maxOutputTokens" min="1" max="8192">
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Controls randomness (or creativity) in AI responses (0-2). Lower values will be coherant and predictable, while larger values will be more creating. A value between 0.2 and 0.5 is recommended." title="Info">?</button>
+            <button class="uets-config-info" data-info="Controls randomness (or creativity) in AI responses (0-2). Lower values will be coherant and predictable, while larger values will be more creating. A value between 0.2 and 0.5 is recommended." title="Info"></button>
             <label class="uets-config-label">Temperature</label>
           </div>
           <input type="number" class="uets-config-input" id="temperature" min="0" max="2" step="0.1">
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Computes the cumulative probability distribution, and cut off as soon as that distribution exceeds the value of topP. Basically how many words can be computed and considered. I recommend a value between 0.90 and 1.00 for a better quality output." title="Info">?</button>
+            <button class="uets-config-info" data-info="Computes the cumulative probability distribution, and cut off as soon as that distribution exceeds the value of topP. Basically how many words can be computed and considered. I recommend a value between 0.90 and 1.00 for a better quality output." title="Info"></button>
             <label class="uets-config-label">Top P</label>
           </div>
           <input type="number" class="uets-config-input" id="topP" min="0" max="1" step="0.05">
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Helps balance creativity and coherence in generated text by introducing controlled randomness while avoiding less likely or nonsensical words. Basically avoids obscure words, I recommend a value between 40 and 64." title="Info">?</button>
+            <button class="uets-config-info" data-info="Helps balance creativity and coherence in generated text by introducing controlled randomness while avoiding less likely or nonsensical words. Basically avoids obscure words, I recommend a value between 40 and 64." title="Info"></button>
             <label class="uets-config-label">Top K</label>
           </div>
           <input type="number" class="uets-config-input" id="topK" min="1" max="100">
         </div>
       </div>
+    </div>
+  </div>
 
-      <div class="uets-config-buttons">
-        <button class="uets-config-button uets-config-save">Save</button>
-        <button class="uets-config-button uets-config-reset">Reset to Defaults</button>
-        <button class="uets-config-button uets-config-cancel">Cancel</button>
-      </div>
-    `;
+  <div class="uets-config-buttons">
+    <button class="uets-config-button uets-config-save">Save</button>
+    <button class="uets-config-button uets-config-reset">Reset to Defaults</button>
+    <button class="uets-config-button uets-config-cancel">Cancel</button>
+  </div>
+`;
 
     // Populate current values
     const populateValues = () => {
@@ -783,6 +1627,14 @@
       document.getElementById('temperature').value = sharedState.config.temperature;
       document.getElementById('topP').value = sharedState.config.topP;
       document.getElementById('topK').value = sharedState.config.topK;
+      document.getElementById('enableReactionSpam').checked = sharedState.config.enableReactionSpam;
+      document.getElementById('reactionSpamCount').value = sharedState.config.reactionSpamCount;
+      document.getElementById('reactionSpamDelay').value = sharedState.config.reactionSpamDelay;
+      // Set active profile button
+      const profileButtons = gui.querySelectorAll('.uets-profile-button');
+      profileButtons.forEach(btn => btn.classList.remove('active'));
+      const customBtn = gui.querySelector('.uets-profile-button[data-profile="Custom"]');
+      if (customBtn) customBtn.classList.add('active');
     };
 
     // Event handlers
@@ -806,6 +1658,9 @@
       sharedState.config.temperature = parseFloat(document.getElementById('temperature').value);
       sharedState.config.topP = parseFloat(document.getElementById('topP').value);
       sharedState.config.topK = parseInt(document.getElementById('topK').value);
+      sharedState.config.enableReactionSpam = document.getElementById('enableReactionSpam').checked;
+      sharedState.config.reactionSpamCount = parseInt(document.getElementById('reactionSpamCount').value);
+      sharedState.config.reactionSpamDelay = parseInt(document.getElementById('reactionSpamDelay').value);
 
       saveConfig();
       closeConfigGui();
@@ -826,6 +1681,27 @@
         });
       }
     };
+
+    // Add event listeners for profile buttons
+    const profileButtons = gui.querySelectorAll('.uets-profile-button');
+    profileButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        // Remove active class from all
+        profileButtons.forEach(b => b.classList.remove('active'));
+        // Add to clicked
+        btn.classList.add('active');
+        const selectedProfile = btn.getAttribute('data-profile');
+        if (selectedProfile !== 'Custom' && PROFILES[selectedProfile]) {
+          const profile = PROFILES[selectedProfile];
+          document.getElementById('enableTimeTakenEdit').checked = profile.enableTimeTakenEdit;
+          document.getElementById('timeTakenMin').value = profile.timeTakenMin;
+          document.getElementById('timeTakenMax').value = profile.timeTakenMax;
+          document.getElementById('enableTimerHijack').checked = profile.enableTimerHijack;
+          document.getElementById('timerBonusPoints').value = profile.timerBonusPoints;
+          document.getElementById('enableSpoofFullscreen').checked = profile.enableSpoofFullscreen;
+        }
+      });
+    });
 
     document.body.appendChild(gui);
     sharedState.configGui = gui;
@@ -921,7 +1797,11 @@
         const filteredModels = response.models.filter(
           (m) =>
             m.supportedGenerationMethods.includes("generateContent") &&
-            m.supportedGenerationMethods.includes("countTokens")
+            m.supportedGenerationMethods.includes("countTokens") &&
+            m.name.includes('gemini') &&
+            m.name.includes('2.') &&
+            !m.name.toLowerCase().includes('tts') &&
+            !m.name.toLowerCase().includes('live')
         );
         models.push(...filteredModels);
         pageToken = response.nextPageToken;
@@ -931,9 +1811,17 @@
       }
     } while (pageToken);
 
+    // Sort: models without 'preview' or 'experimental' first, then with 'preview' or 'experimental'
+    models.sort((a, b) => {
+      const aHasPreviewOrExperimental = a.name.toLowerCase().includes('preview') || a.name.toLowerCase().includes('experimental');
+      const bHasPreviewOrExperimental = b.name.toLowerCase().includes('preview') || b.name.toLowerCase().includes('experimental');
+      if (aHasPreviewOrExperimental && !bHasPreviewOrExperimental) return 1;
+      if (!aHasPreviewOrExperimental && bHasPreviewOrExperimental) return -1;
+      return 0;
+    });
+
     return models;
   };
-
 
   // === SHARED IMAGE FETCHING ===
   const fetchImageAsBase64 = (imageUrl) =>
@@ -1137,7 +2025,6 @@ Please perform the following:
 
       const closeButton = document.createElement("button");
       closeButton.classList.add("uets-response-popup-close");
-      closeButton.innerHTML = "×";
       closeButton.onclick = () => {
         popup.remove();
         sharedState.geminiPopup = null;
@@ -1160,7 +2047,12 @@ Please perform the following:
 
     const contentDiv = popup.querySelector(".uets-response-popup-content");
     if (isLoading) {
-      contentDiv.innerHTML = `<div class="uets-response-popup-loading">${content}</div>`;
+      contentDiv.innerHTML = `
+        <div class="uets-response-popup-loading">
+          <div class="uets-loading-spinner"></div>
+          ${content}
+        </div>
+      `;
     } else {
       let formattedContent = content.replace(
         /^(Correct Answer\(s\):)/gim,
@@ -1179,14 +2071,27 @@ Please perform the following:
   const updateToggleButtonAppearance = () => {
     if (!sharedState.toggleButton) return;
     if (sharedState.uiModificationsEnabled) {
-      sharedState.toggleButton.innerHTML = "✕";
+      sharedState.toggleButton.innerHTML = "";
+      sharedState.toggleButton.style.fontFamily = "'Material Icons Outlined'";
+      sharedState.toggleButton.style.fontSize = "24px";
+      sharedState.toggleButton.style.setProperty("--icon", "'close'");
+      sharedState.toggleButton.setAttribute("data-icon", "close");
       sharedState.toggleButton.title = "Hide Tool Modifications";
       sharedState.toggleButton.classList.remove("uets-mods-hidden-state");
     } else {
-      sharedState.toggleButton.innerHTML = "🛠️";
+      sharedState.toggleButton.innerHTML = "";
+      sharedState.toggleButton.style.fontFamily = "'Material Icons Outlined'";
+      sharedState.toggleButton.style.fontSize = "24px";
+      sharedState.toggleButton.style.setProperty("--icon", "'add'");
+      sharedState.toggleButton.setAttribute("data-icon", "add");
       sharedState.toggleButton.title = "Show Tool Modifications";
       sharedState.toggleButton.classList.add("uets-mods-hidden-state");
     }
+
+    // Set the icon content
+    sharedState.toggleButton.style.setProperty("content", sharedState.uiModificationsEnabled ? "'close'" : "'add'");
+    const icon = sharedState.uiModificationsEnabled ? "close" : "add";
+    sharedState.toggleButton.textContent = icon;
   };
 
   const handleToggleUiClick = () => {
@@ -1964,17 +2869,16 @@ Please perform the following:
     ) {
       // Send original request
       const result = originalXMLHttpRequestSend.call(this, data);
-      // Resend twice
-      setTimeout(() => {
-        const xhr1 = new XMLHttpRequest();
-        xhr1.open(this._method, this._url);
-        xhr1.send(data);
-      }, 100);
-      setTimeout(() => {
-        const xhr2 = new XMLHttpRequest();
-        xhr2.open(this._method, this._url);
-        xhr2.send(data);
-      }, 200);
+      // Resend based on config
+      if (sharedState.config.enableReactionSpam) {
+        for (let i = 1; i <= sharedState.config.reactionSpamCount; i++) {
+          setTimeout(() => {
+            const xhr = new XMLHttpRequest();
+            xhr.open(this._method, this._url);
+            xhr.send(data);
+          }, sharedState.config.reactionSpamDelay * i);
+        }
+      }
       return result;
     }
 
@@ -2018,6 +2922,27 @@ Please perform the following:
       } catch (e) {
         console.log("Failed to parse/modify proceedGame fetch request:", e);
       }
+    }
+
+    // Intercept requests to reaction-update via fetch
+    if (
+      typeof url === "string" &&
+      url.includes("https://wayground.com/_gameapi/main/public/v1/games/") &&
+      url.includes("/reaction-update") &&
+      options &&
+      options.method === "POST" &&
+      options.body &&
+      sharedState.config.enableReactionSpam
+    ) {
+      // Send original request
+      const result = originalFetch.call(this, url, options);
+      // Resend based on config
+      for (let i = 1; i <= sharedState.config.reactionSpamCount; i++) {
+        setTimeout(() => {
+          originalFetch.call(this, url, options);
+        }, sharedState.config.reactionSpamDelay * i);
+      }
+      return result;
     }
 
     if (
@@ -2111,6 +3036,12 @@ Please perform the following:
     initializeDomainSpecific();
     GM_log(`UETS loaded on ${sharedState.currentDomain}`);
     GM_log(`Made by Nyx (with the slight help of GH Copilot)`);
+
+    // Check for first run and show welcome popup
+    if (!GM_getValue(sharedState.firstRunKey, false)) {
+      GM_setValue(sharedState.firstRunKey, true);
+      setTimeout(() => showWelcomePopup(), 1000); // Delay to ensure page is loaded
+    }
   };
 
   if (document.body) {
