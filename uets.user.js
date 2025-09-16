@@ -29,16 +29,13 @@
 
   // === SHARED CONSTANTS ===
   const GEMINI_API_KEY_STORAGE = "UETS_GEMINI_API_KEY";
-  const GEMINI_MODEL = "gemini-2.5-flash";
   const UI_MODS_ENABLED_KEY = "uets_ui_modifications_enabled";
-  const SERVER_URL = "http://localhost:5000";
-  // Add config storage keys
   const CONFIG_STORAGE_KEY = "UETS_CONFIG";
   const DEFAULT_CONFIG = {
     enableTimeTakenEdit: true,
     timeTakenMin: 5067,
     timeTakenMax: 7067,
-    enableTimerHijack: false,
+    enableTimerHijack: true,
     timerBonusPoints: 270,
     enableSpoofFullscreen: true,
     serverUrl: "http://localhost:5000",
@@ -48,7 +45,7 @@
     maxOutputTokens: 1024,
     temperature: 0.2,
     topP: 0.95,
-    topK: 40,
+    topK: 64,
     includeImages: true
   };
 
@@ -66,7 +63,9 @@
     questionsPool: {}, // Add this to store all questions with their options
     config: GM_getValue(CONFIG_STORAGE_KEY, DEFAULT_CONFIG),
     configGui: null,
-    holdTimeout: null
+    holdTimeout: null,
+    originalTabLeaveHTML: null,
+    originalStartButtonText: null
   };
 
   // === SHARED STYLES ===
@@ -94,20 +93,20 @@
         width: 100%; box-sizing: border-box; margin-top: 16px; padding: 6px 0; border-radius: 0 0 4px 4px; flex-shrink: 0;
     }
     .uets-ddg-link-main-question, .uets-gemini-button-main-question, .uets-copy-prompt-button-main-question {
-    display: inline-block; width: fit-content; margin: 0;
+      display: inline-block; width: fit-content; margin: 0;
     }
     .uets-main-question-buttons-container {
-        display: flex; justify-content: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;
+      display: flex; justify-content: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;
     }
 
     .uets-response-popup {
-        position: fixed; top: 20%; left: 50%; transform: translate(-50%, 0%);
-        background-color: #2d3748; color: #e2e8f0; border: 1px solid #4a5568;
-        border-radius: 8px; padding: 20px; z-index: 10001; min-width: 380px;
-        max-width: 650px; max-height: 80vh; overflow-y: auto;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.35), 0 6px 10px rgba(0,0,0,0.25);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-        font-size: 15px;
+      position: fixed; top: 20%; left: 50%; transform: translate(-50%, 0%);
+      background-color: #2d3748; color: #e2e8f0; border: 1px solid #4a5568;
+      border-radius: 8px; padding: 20px; z-index: 10004; min-width: 380px;
+      max-width: 650px; max-height: 80vh; overflow-y: auto;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.35), 0 6px 10px rgba(0,0,0,0.25);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+      font-size: 15px;
     }
     .uets-response-popup-header {
         display: flex; justify-content: space-between; align-items: center;
@@ -228,6 +227,29 @@
         background-color: #718096; color: white;
     }
     .uets-config-cancel:hover { background-color: #4a5568; }
+    .uets-config-label-container {
+      display: flex;
+      align-items: center;
+      flex: 1;
+      margin-right: 15px;
+    }
+    .uets-config-label {
+      margin-left: 5px;
+    }
+    .uets-config-info {
+      background: #4299e1;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      font-size: 12px;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+    .uets-config-info:hover {
+      background: #3182ce;
+    }
   `);
 
   // === SHARED UTILITIES ===
@@ -607,6 +629,9 @@
   };
 
   const createConfigGui = () => {
+    if (sharedState.uiModificationsEnabled === false) {
+      handleToggleUiClick();
+    }
     if (sharedState.configGui) return;
 
     const gui = document.createElement('div');
@@ -617,75 +642,120 @@
         <span class="uets-config-title">UETS Configuration</span>
         <button class="uets-config-close">×</button>
       </div>
-      
-      <div class="uets-config-section">
-        <div class="uets-config-section-title">Wayground/Quizizz Settings</div>
-        <div class="uets-config-item">
-          <label class="uets-config-label">Edit timeTaken values</label>
-          <input type="checkbox" class="uets-config-checkbox" id="enableTimeTakenEdit">
-        </div>
-        <div class="uets-config-item">
-          <label class="uets-config-label">TimeTaken Min (ms)</label>
-          <input type="number" class="uets-config-input" id="timeTakenMin" min="1000" max="60000">
-        </div>
-        <div class="uets-config-item">
-          <label class="uets-config-label">TimeTaken Max (ms)</label>
-          <input type="number" class="uets-config-input" id="timeTakenMax" min="1000" max="60000">
-        </div>
-        <div class="uets-config-item">
-          <label class="uets-config-label">Hijack timer for bonus points</label>
-          <input type="checkbox" class="uets-config-checkbox" id="enableTimerHijack">
-        </div>
-        <div class="uets-config-item">
-          <label class="uets-config-label">Timer bonus points</label>
-          <input type="number" class="uets-config-input" id="timerBonusPoints" min="0" max="5000">
-        </div>
-      </div>
 
       <div class="uets-config-section">
         <div class="uets-config-section-title">General Settings</div>
         <div class="uets-config-item">
-          <label class="uets-config-label">Enable fullscreen spoofing</label>
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Makes the website think that it's in fullscreen mode AND focused. Recommended on Testportal and Wayground (if the teacher enabled extra protections)." title="Info">?</button>
+            <label class="uets-config-label">Fullscreen spoofing</label>
+          </div>
           <input type="checkbox" class="uets-config-checkbox" id="enableSpoofFullscreen">
         </div>
         <div class="uets-config-item">
-          <label class="uets-config-label">Server URL</label>
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="URL of the server for storing and retrieving answers." title="Info">?</button>
+            <label class="uets-config-label">Server URL</label>
+          </div>
           <input type="text" class="uets-config-input" id="serverUrl" style="width: 200px;">
+        </div>
+      </div>
+
+      <div class="uets-config-section">
+        <div class="uets-config-section-title">Wayground/Quizizz Settings</div>
+        <div class="uets-config-item">
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Allows you to spoof the time taken to answer a question. You have 20 seconds to get a ~100-400 point bonus per question, this option forces the site to give you bonus points." title="Info">?</button>
+            <label class="uets-config-label">Hijack timeTaken</label>
+          </div>
+          <input type="checkbox" class="uets-config-checkbox" id="enableTimeTakenEdit">
+        </div>
+        <div class="uets-config-item">
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Minimum time in milliseconds for randomized time taken. I recommend keeping it between 6000 and 9000. Very low values will alert the teacher." title="Info">?</button>
+            <label class="uets-config-label">^timeTaken min (ms)</label>
+          </div>
+          <input type="number" class="uets-config-input" id="timeTakenMin" min="100" max="60000">
+        </div>
+        <div class="uets-config-item">
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Maximum time in milliseconds for randomized time taken. I recommend keeping it between 7000 and 12000. Very low values will alert the teacher." title="Info">?</button>
+            <label class="uets-config-label">^timeTaken max (ms)</label>
+          </div>
+          <input type="number" class="uets-config-input" id="timeTakenMax" min="100" max="60000">
+        </div>
+        <div class="uets-config-item">
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Enables timer hijacking, this adds bonus points to your score, I recommend keeping it between 200 and 350 points to seem legitimate." title="Info">?</button>
+            <label class="uets-config-label">Hijack timer for points</label>
+          </div>
+          <input type="checkbox" class="uets-config-checkbox" id="enableTimerHijack">
+        </div>
+        <div class="uets-config-item">
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Timer bonus that you'll recieve if you enable timer hijacking. Values above 6000 are problematic and will cause issues. Maximum value that's guaranteed to work is 5000, but I don't recommend setting it to anything above 350." title="Info">?</button>
+            <label class="uets-config-label">^Timer bonus points</label>
+          </div>
+          <input type="number" class="uets-config-input" id="timerBonusPoints" min="0" max="5000">
         </div>
       </div>
 
       <div class="uets-config-section">
         <div class="uets-config-section-title">Gemini AI Settings</div>
         <div class="uets-config-item">
-          <label class="uets-config-label">API Key</label>
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Your Gemini API key for AI assistance. You can get it on https://aistudio.google.com/apikey." title="Info">?</button>
+            <label class="uets-config-label">API Key</label>
+          </div>
           <input type="password" class="uets-config-input" id="geminiApiKey" style="width: 200px;">
         </div>
         <div class="uets-config-item">
-          <label class="uets-config-label">Model</label>
-          <input type="text" class="uets-config-input" id="geminiModel" style="width: 150px;">
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="The Gemini model to use for AI queries. I recommend using the flash or lite series of models for quick answers." title="Info">?</button>
+            <label class="uets-config-label">Model</label>
+          </div>
+          <select class="uets-config-input" id="geminiModel" style="width: 150px;"><option>Loading models...</option></select>
         </div>
         <div class="uets-config-item">
-          <label class="uets-config-label">Include images in prompts</label>
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Whether to include question images in AI prompts." title="Info">?</button>
+            <label class="uets-config-label">Include images</label>
+          </div>
           <input type="checkbox" class="uets-config-checkbox" id="includeImages">
         </div>
         <div class="uets-config-item">
-          <label class="uets-config-label">Thinking Budget</label>
-          <input type="number" class="uets-config-input" id="thinkingBudget" min="0" max="2048">
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Budget for thinking in the AI model (0 disables thinking). Can increase output response quality, but increases the waiting time for the answer. I recommend 256 or 512 tokens." title="Info">?</button>
+            <label class="uets-config-label">Thinking budget</label>
+          </div>
+          <input type="number" class="uets-config-input" id="thinkingBudget" min="0" max="4096">
         </div>
         <div class="uets-config-item">
-          <label class="uets-config-label">Max Output Tokens</label>
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Maximum number of tokens in AI responses (1-8192). A token is roughly equal to a word, or a punctuation mark." title="Info">?</button>
+            <label class="uets-config-label">Max output tokens</label>
+          </div>
           <input type="number" class="uets-config-input" id="maxOutputTokens" min="1" max="8192">
         </div>
         <div class="uets-config-item">
-          <label class="uets-config-label">Temperature</label>
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Controls randomness (or creativity) in AI responses (0-2). Lower values will be coherant and predictable, while larger values will be more creating. A value between 0.2 and 0.5 is recommended." title="Info">?</button>
+            <label class="uets-config-label">Temperature</label>
+          </div>
           <input type="number" class="uets-config-input" id="temperature" min="0" max="2" step="0.1">
         </div>
         <div class="uets-config-item">
-          <label class="uets-config-label">Top P</label>
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Computes the cumulative probability distribution, and cut off as soon as that distribution exceeds the value of topP. Basically how many words can be computed and considered. I recommend a value between 0.90 and 1.00 for a better quality output." title="Info">?</button>
+            <label class="uets-config-label">Top P</label>
+          </div>
           <input type="number" class="uets-config-input" id="topP" min="0" max="1" step="0.05">
         </div>
         <div class="uets-config-item">
-          <label class="uets-config-label">Top K</label>
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Helps balance creativity and coherence in generated text by introducing controlled randomness while avoiding less likely or nonsensical words. Basically avoids obscure words, I recommend a value between 40 and 64." title="Info">?</button>
+            <label class="uets-config-label">Top K</label>
+          </div>
           <input type="number" class="uets-config-input" id="topK" min="1" max="100">
         </div>
       </div>
@@ -707,7 +777,6 @@
       document.getElementById('enableSpoofFullscreen').checked = sharedState.config.enableSpoofFullscreen;
       document.getElementById('serverUrl').value = sharedState.config.serverUrl;
       document.getElementById('geminiApiKey').value = sharedState.config.geminiApiKey;
-      document.getElementById('geminiModel').value = sharedState.config.geminiModel;
       document.getElementById('includeImages').checked = sharedState.config.includeImages;
       document.getElementById('thinkingBudget').value = sharedState.config.thinkingBudget;
       document.getElementById('maxOutputTokens').value = sharedState.config.maxOutputTokens;
@@ -747,12 +816,43 @@
       if (confirm('Reset all settings to defaults?')) {
         resetConfig();
         populateValues();
+        // Re-fetch models after reset
+        fetchGeminiModels().then(models => {
+          const select = document.getElementById('geminiModel');
+          if (select) {
+            select.innerHTML = models.map(m => `<option value="${m.name.replace('models/', '')}">${m.displayName}</option>`).join('');
+            select.value = sharedState.config.geminiModel;
+          }
+        });
       }
     };
 
     document.body.appendChild(gui);
     sharedState.configGui = gui;
     populateValues();
+
+    // Fetch and populate models
+    fetchGeminiModels().then(models => {
+      const select = document.getElementById('geminiModel');
+      if (select) {
+        select.innerHTML = models.map(m => `<option value="${m.name.replace('models/', '')}">${m.displayName}</option>`).join('');
+        select.value = sharedState.config.geminiModel;
+      }
+    }).catch(() => {
+      const select = document.getElementById('geminiModel');
+      if (select) {
+        select.innerHTML = '<option value="">Failed to load models</option>';
+      }
+    });
+
+    // Add event listeners for info buttons
+    const infoButtons = gui.querySelectorAll('.uets-config-info');
+    infoButtons.forEach(btn => {
+      btn.onclick = () => {
+        const info = btn.getAttribute('data-info');
+        showResponsePopup(info, false, "Option Info");
+      };
+    });
   };
 
   const closeConfigGui = () => {
@@ -790,6 +890,50 @@
     }
     return apiKey.trim();
   };
+
+
+  // === SHARED MODEL FETCHING ===
+  const fetchGeminiModels = async () => {
+    const apiKey = sharedState.config.geminiApiKey;
+    if (!apiKey || apiKey.trim() === "") return [];
+
+    let models = [];
+    let pageToken = '';
+
+    do {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}${pageToken ? '&pageToken=' + pageToken : ''}`;
+      try {
+        const response = await new Promise((resolve, reject) => {
+          GM_xmlhttpRequest({
+            method: "GET",
+            url: url,
+            onload: (res) => {
+              if (res.status === 200) {
+                resolve(JSON.parse(res.responseText));
+              } else {
+                reject(new Error(`HTTP ${res.status}: ${res.responseText}`));
+              }
+            },
+            onerror: (err) => reject(err),
+          });
+        });
+
+        const filteredModels = response.models.filter(
+          (m) =>
+            m.supportedGenerationMethods.includes("generateContent") &&
+            m.supportedGenerationMethods.includes("countTokens")
+        );
+        models.push(...filteredModels);
+        pageToken = response.nextPageToken;
+      } catch (error) {
+        GM_log("Error fetching Gemini models:", error);
+        break;
+      }
+    } while (pageToken);
+
+    return models;
+  };
+
 
   // === SHARED IMAGE FETCHING ===
   const fetchImageAsBase64 = (imageUrl) =>
@@ -1077,6 +1221,27 @@ Please perform the following:
       });
       sharedState.elementsToCleanup = [];
 
+      if (sharedState.currentDomain.includes("wayground.com") || sharedState.currentDomain.includes("quizizz.com")) {
+        // Revert text edits
+        if (sharedState.originalTabLeaveHTML !== null) {
+          const ruleDiv = document.querySelector('.test-mode-container');
+          if (ruleDiv) {
+            ruleDiv.innerHTML = sharedState.originalTabLeaveHTML;
+          }
+          sharedState.originalTabLeaveHTML = null;
+        }
+        if (sharedState.originalStartButtonText !== null) {
+          const startButton = document.querySelector('.start-game');
+          if (startButton) {
+            const span = startButton.querySelector('span');
+            if (span) {
+              span.textContent = sharedState.originalStartButtonText;
+            }
+          }
+          sharedState.originalStartButtonText = null;
+        }
+      };
+
       if (sharedState.currentDomain.includes("docs.google.com")) {
         const questionBlocks = document.querySelectorAll(
           'div[role="listitem"] > div[jsmodel]',
@@ -1114,6 +1279,7 @@ Please perform the following:
       sharedState.holdTimeout = setTimeout(() => {
         createConfigGui();
       }, 3000);
+      handleToggleUiClick();
     });
 
     sharedState.toggleButton.addEventListener("mouseup", () => {
@@ -1127,14 +1293,6 @@ Please perform the following:
       if (sharedState.holdTimeout) {
         clearTimeout(sharedState.holdTimeout);
         sharedState.holdTimeout = null;
-      }
-    });
-
-    sharedState.toggleButton.addEventListener("click", (e) => {
-      if (sharedState.holdTimeout) {
-        clearTimeout(sharedState.holdTimeout);
-        sharedState.holdTimeout = null;
-        handleToggleUiClick();
       }
     });
 
@@ -1315,6 +1473,29 @@ Please perform the following:
       }
     },
 
+    modifyTabLeaveWarning: () => {
+      const ruleDiv = document.querySelector('.test-mode-container');
+      if (ruleDiv) {
+        if (sharedState.originalTabLeaveHTML === null) {
+          sharedState.originalTabLeaveHTML = ruleDiv.innerHTML;
+        }
+        ruleDiv.innerHTML = "<h4 data-v-aceb3d94=\"\" class=\"heading\">Teacher rules bypassed:  </h4><div data-v-aceb3d94=\"\" class=\"test-mode-rules\"><!----><div data-v-aceb3d94=\"\" class=\"rule\">You can leave the Wayground tab during this session. To remove fullscreen warnings enable fullscreen spoofing in settings.</div></div>";
+      }
+    },
+
+    modifyStartButton: () => {
+      const startButton = document.querySelector('.start-game');
+      if (startButton) {
+        const span = startButton.querySelector('span');
+        if (span && span.textContent.includes('Start in fullscreen mode')) {
+          if (sharedState.originalStartButtonText === null) {
+            sharedState.originalStartButtonText = span.textContent;
+          }
+          span.textContent = 'Start game';
+        }
+      }
+    },
+
     initialize: () => {
       quizizzModule.lastPageInfo = "INITIAL_STATE";
 
@@ -1325,6 +1506,8 @@ Please perform the following:
           if (sharedState.uiModificationsEnabled) {
             quizizzModule.checkPageInfoAndReprocess();
             quizizzModule.enhanceStreakCounter();
+            quizizzModule.modifyTabLeaveWarning();
+            quizizzModule.modifyStartButton();
           }
         }, 500),
       );
@@ -1337,6 +1520,8 @@ Please perform the following:
       if (sharedState.uiModificationsEnabled) {
         quizizzModule.extractAndProcess();
         quizizzModule.enhanceStreakCounter();
+        quizizzModule.modifyTabLeaveWarning();
+        quizizzModule.modifyStartButton();
         // Add delay to check for existing streak element
         // NOTE: this may not be enough on shitty connections
         setTimeout(() => quizizzModule.enhanceStreakCounter(), 1000);
