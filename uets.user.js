@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.2.0
+// @version      1.2.1
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -1156,7 +1156,6 @@
       data.response.timeTaken = timetakenforce;
 
       if (sharedState.config.enableTimerHijack) {
-        console.log(data.response.provisional.scoreBreakups.correct.timer);
         data.response.provisional.scoreBreakups.correct.timer = sharedState.config.timerBonusPoints;
         data.response.provisional.scoreBreakups.correct.total = sharedState.config.timerBonusPoints + data.response.provisional.scoreBreakups.correct.base + data.response.provisional.scoreBreakups.correct.streak;
         data.response.provisional.scores.correct = sharedState.config.timerBonusPoints + data.response.provisional.scoreBreakups.correct.base + data.response.provisional.scoreBreakups.correct.streak;
@@ -1168,8 +1167,6 @@
 
   const processProceedGameResponse = (data) => {
     if (
-      data.response &&
-      data.response.result === "CORRECT" &&
       data.question &&
       data.question.structure &&
       data.question.structure.answer !== undefined
