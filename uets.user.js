@@ -2170,7 +2170,7 @@ Please perform the following:
       }
       lastTapTime = now;
 
-      if (tapCount === 3) {
+      if (tapCount === 4) {
         createConfigGui();
         tapCount = 0;
       } else if (tapCount === 1) {
