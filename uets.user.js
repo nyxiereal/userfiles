@@ -1017,7 +1017,7 @@
 
     const content = document.createElement("div");
     content.classList.add("uets-response-popup-content");
-    content.innerHTML = `<p>- Press the floating button (bottom-left) to activate/deactivate visual changes on the page.\n- Press and hold the button for 3 seconds to open the settings menu.\n- In the settings, click on the info button on the left side of each option to get some insight into the setting.</p>`;
+    content.innerHTML = `<p>- Press the floating button (bottom-left) to activate/deactivate visual changes on the page.\n- Press and release the button 3 times within 2 seconds to open the settings menu.\n- In the settings, click on the info button on the left side of each option to get some insight into the setting.</p>`;
     popup.appendChild(content);
 
     document.body.appendChild(popup);
@@ -2156,7 +2156,10 @@ Please perform the following:
     sharedState.toggleButton.id = "uets-toggle-ui-button";
     updateToggleButtonAppearance();
 
-    // Handle click and hold for config
+    // Double-tap detection for mobile users
+    let lastTapTime = 0;
+    let tapCount = 0;
+
     sharedState.toggleButton.addEventListener("mousedown", () => {
       sharedState.holdTimeout = setTimeout(() => {
         createConfigGui();
@@ -2175,6 +2178,23 @@ Please perform the following:
       if (sharedState.holdTimeout) {
         clearTimeout(sharedState.holdTimeout);
         sharedState.holdTimeout = null;
+      }
+    });
+
+    // Add touch support for mobile double-tap
+    sharedState.toggleButton.addEventListener("touchend", () => {
+      const now = Date.now();
+      if (now - lastTapTime < 2000) {
+        tapCount += 1;
+      } else {
+        tapCount = 1;
+      }
+      lastTapTime = now;
+      if (tapCount === 3) {
+        createConfigGui();
+        tapCount = 0;
+      } else {
+        handleToggleUiClick();
       }
     });
 
