@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.2.3
+// @version      1.2.4
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -2159,7 +2159,7 @@ Please perform the following:
     // Tap/click counter for config GUI
     let lastTapTime = 0;
     let tapCount = 0;
-    const TAP_WINDOW_MS = 2000;
+    const TAP_WINDOW_MS = 500;
 
     const handleTap = () => {
       const now = Date.now();
