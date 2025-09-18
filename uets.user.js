@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.2.2
+// @version      1.2.3
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -2156,47 +2156,30 @@ Please perform the following:
     sharedState.toggleButton.id = "uets-toggle-ui-button";
     updateToggleButtonAppearance();
 
-    // Double-tap detection for mobile users
+    // Tap/click counter for config GUI
     let lastTapTime = 0;
     let tapCount = 0;
+    const TAP_WINDOW_MS = 2000;
 
-    sharedState.toggleButton.addEventListener("mousedown", () => {
-      sharedState.holdTimeout = setTimeout(() => {
-        createConfigGui();
-      }, 3000);
-      handleToggleUiClick();
-    });
-
-    sharedState.toggleButton.addEventListener("mouseup", () => {
-      if (sharedState.holdTimeout) {
-        clearTimeout(sharedState.holdTimeout);
-        sharedState.holdTimeout = null;
-      }
-    });
-
-    sharedState.toggleButton.addEventListener("mouseleave", () => {
-      if (sharedState.holdTimeout) {
-        clearTimeout(sharedState.holdTimeout);
-        sharedState.holdTimeout = null;
-      }
-    });
-
-    // Add touch support for mobile double-tap
-    sharedState.toggleButton.addEventListener("touchend", () => {
+    const handleTap = () => {
       const now = Date.now();
-      if (now - lastTapTime < 2000) {
+      if (now - lastTapTime < TAP_WINDOW_MS) {
         tapCount += 1;
       } else {
         tapCount = 1;
       }
       lastTapTime = now;
+
       if (tapCount === 3) {
         createConfigGui();
         tapCount = 0;
-      } else {
+      } else if (tapCount === 1) {
         handleToggleUiClick();
       }
-    });
+    };
+
+    sharedState.toggleButton.addEventListener("click", handleTap);
+    sharedState.toggleButton.addEventListener("touchend", handleTap);
 
     document.body.appendChild(sharedState.toggleButton);
   };
