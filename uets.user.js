@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.1.1
+// @version      1.2.0
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -38,7 +38,7 @@
     enableTimerHijack: true,
     timerBonusPoints: 270,
     enableSpoofFullscreen: true,
-    serverUrl: "http://localhost:5000",
+    serverUrl: "https://uets.fuckingbitch.eu",
     geminiApiKey: "",
     geminiModel: "gemini-2.5-flash",
     thinkingBudget: 256,
@@ -48,18 +48,25 @@
     topK: 64,
     includeImages: true,
     enableReactionSpam: true,
-    reactionSpamCount: 2,
-    reactionSpamDelay: 100
+    reactionSpamCount: 1,
+    reactionSpamDelay: 2000
   };
 
   const PROFILES = {
-    "Stealthy": {
+    "True Stealth": {
+      enableTimeTakenEdit: false,
+      enableTimerHijack: false,
+      enableSpoofFullscreen: true,
+      enableReactionSpam: false,
+    },
+    "Stealthy Extended": {
       enableTimeTakenEdit: true,
       timeTakenMin: 8000,
       timeTakenMax: 14000,
       enableTimerHijack: true,
       timerBonusPoints: 200,
       enableSpoofFullscreen: true,
+      enableReactionSpam: false,
     },
     "Creator's choice": {
       enableTimeTakenEdit: true,
@@ -68,6 +75,7 @@
       enableTimerHijack: true,
       timerBonusPoints: 270,
       enableSpoofFullscreen: true,
+      enableReactionSpam: false,
     },
     "LMAO": {
       enableTimeTakenEdit: true,
@@ -76,6 +84,9 @@
       enableTimerHijack: true,
       timerBonusPoints: 5000,
       enableSpoofFullscreen: true,
+      enableReactionSpam: true,
+      reactionSpamCount: 2,
+      reactionSpamDelay: 500
     },
   };
 
@@ -90,7 +101,7 @@
     originalRegExpTest: RegExp.prototype.test,
     quizData: {},
     currentQuestionId: null,
-    questionsPool: {}, // Add this to store all questions with their options
+    questionsPool: {},
     config: GM_getValue(CONFIG_STORAGE_KEY, DEFAULT_CONFIG),
     configGui: null,
     holdTimeout: null,
@@ -261,17 +272,17 @@
   }
 
   .uets-success-button {
-    background: #4CAF50;
+    background: #a6e3a1;
     color: white;
   }
 
   .uets-warning-button {
-    background: #FF9800;
+    background: #fab387;
     color: white;
   }
 
   .uets-purple-button {
-    background: #9C27B0;
+    background: #cba6f7;
     color: white;
   }
 
@@ -279,7 +290,7 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 16px;
+    padding: 4px 8px;
     color: var(--md-on-primary);
     text-decoration: none;
     border-radius: 20px;
@@ -292,29 +303,35 @@
     border: none;
     font-family: 'Roboto', sans-serif;
     min-height: 40px;
+    margin: 1px;
     justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
   }
 
   .uets-ddg-link:hover, .uets-gemini-button:hover, .uets-copy-prompt-button:hover,
   .uets-ai-button:hover, .uets-ddg-button:hover, .uets-get-answer-button:hover {
-    box-shadow: 0 2px 4px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
-    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
   }
 
   .uets-ddg-link, .uets-ddg-button { 
-    background: #4CAF50;
+    background: #a6e3a1 !important;
+    color: white !important;
   }
 
   .uets-gemini-button, .uets-ai-button { 
-    background: var(--md-primary);
+    background: #74c7ec !important;
+    color: white !important;
   }
 
   .uets-copy-prompt-button { 
-    background: #FF9800;
+    background: #fab387 !important;
+    color: white !important;
   }
 
   .uets-get-answer-button { 
-    background: #9C27B0;
+    background: #cba6f7 !important;
+    color: white !important;
   }
 
   .uets-ddg-link::before, .uets-ddg-button::before {
@@ -369,13 +386,12 @@
   .uets-main-question-buttons-container {
     display: flex;
     justify-content: center;
-    gap: 8px;
-    margin-top: 16px;
-    flex-wrap: wrap;
-    padding: 16px;
-    background: var(--md-surface-container-lowest);
+    gap: 4px;
+    background: #313244;
     border-radius: 12px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    margin: 1px;
+    flex-wrap: wrap;
+    padding: 2px;
   }
 
   .uets-response-popup {
@@ -532,42 +548,6 @@
 
   #uets-toggle-ui-button.uets-mods-hidden-state:hover {
     background: rgba(103, 80, 164, 0.08);
-    box-shadow: none;
-  }
-
-  .gform-copy-button {
-    background: var(--md-primary);
-    color: var(--md-on-primary);
-    border: none;
-    border-radius: 20px;
-    padding: 8px 16px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
-    font-family: 'Roboto', sans-serif;
-    margin-left: 12px;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .gform-copy-button::before {
-    content: 'content_copy';
-    font-family: 'Material Icons Outlined';
-    font-size: 16px;
-  }
-
-  .gform-copy-button:hover {
-    box-shadow: 0 2px 4px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
-    transform: translateY(-1px);
-  }
-
-  .gform-copy-button:disabled {
-    background: var(--md-outline-variant);
-    color: var(--md-on-surface-variant);
-    cursor: default;
-    transform: none;
     box-shadow: none;
   }
 
@@ -1084,7 +1064,7 @@
     buttonsContainer.appendChild(ddgLink);
 
     const copyPromptButton = createButton(
-      "Copy Prompt",
+      "Prompt",
       "uets-copy-prompt-button uets-copy-prompt-button-main-question",
       async () => {
         const prompt = buildGeminiPrompt(
@@ -1097,7 +1077,7 @@
           await navigator.clipboard.writeText(prompt);
           copyPromptButton.textContent = "Copied!";
           setTimeout(
-            () => (copyPromptButton.textContent = "Copy Prompt"),
+            () => (copyPromptButton.textContent = "Prompt"),
             2000,
           );
         } catch (err) {
@@ -2696,32 +2676,65 @@ Please perform the following:
         if (block.dataset.uetsButtonsAdded) return;
         block.dataset.uetsButtonsAdded = "true";
 
+        // Find the heading container (the question text/title)
         const headingContainer = block.querySelector('div[role="heading"]');
         if (!headingContainer) return;
 
-        const copyButton = createButton(
-          "Copy",
-          "gform-copy-button",
-          googleFormsModule.handleCopyClick,
-        );
-        headingContainer.appendChild(copyButton);
-        sharedState.elementsToCleanup.push(copyButton);
+        // Extract question text
+        const questionTitleEl = headingContainer.querySelector('span');
+        const questionText = questionTitleEl
+          ? questionTitleEl.textContent.trim()
+          : "Question not found";
 
-        const aiButton = createButton(
-          "Ask AI",
-          "uets-ai-button",
-          googleFormsModule.handleAiClick,
-        );
-        headingContainer.appendChild(aiButton);
-        sharedState.elementsToCleanup.push(aiButton);
+        // Extract options
+        let options = [];
+        const radioOptions = block.querySelectorAll('div[role="radio"]');
+        if (radioOptions.length > 0) {
+          radioOptions.forEach((radio) => {
+            const label = radio.getAttribute("aria-label");
+            if (label) options.push(label);
+          });
+        } else {
+          const checkOptions = block.querySelectorAll('div[role="checkbox"]');
+          if (checkOptions.length > 0) {
+            checkOptions.forEach((check) => {
+              const label =
+                check.getAttribute("aria-label") ||
+                check.getAttribute("data-answer-value");
+              if (label) options.push(label);
+            });
+          }
+        }
 
-        const ddgButton = createButton(
+        // Extract image URL if present (assuming images are in the block)
+        let imageUrl = null;
+        const imageElement = block.querySelector('img');
+        if (imageElement && imageElement.src) {
+          imageUrl = imageElement.src.startsWith("/")
+            ? window.location.origin + imageElement.src
+            : imageElement.src;
+        }
+
+        // Use addQuestionButtons to add the buttons
+        const buttonsContainer = document.createElement("div");
+        buttonsContainer.classList.add("uets-main-question-buttons-container");
+        addQuestionButtons(
+          buttonsContainer,
+          questionText,
+          options,
+          imageUrl,
+          "form",
+          false,
           "DDG",
-          "uets-ddg-button",
-          googleFormsModule.handleDdgClick,
         );
-        headingContainer.appendChild(ddgButton);
-        sharedState.elementsToCleanup.push(ddgButton);
+
+        // Insert the buttonsContainer directly after the headingContainer
+        if (headingContainer.parentNode === block) {
+          block.insertBefore(buttonsContainer, headingContainer.nextSibling);
+        } else {
+          headingContainer.parentNode.insertBefore(buttonsContainer, headingContainer.nextSibling);
+        }
+        sharedState.elementsToCleanup.push(buttonsContainer);
       });
     },
 

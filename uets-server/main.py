@@ -6,7 +6,15 @@ import os
 from datetime import datetime
 
 app = Flask(__name__)
-CORS(app, origins=["https://wayground.com", "https://*.wayground.com"])
+CORS(
+    app,
+    origins=[
+        "https://wayground.com",
+        "https://*.wayground.com",
+        "https://quizizz.com",
+        "https://*.quizizz.com",
+    ],
+)
 
 basicConfig(filename="uets-server.log", level=INFO)
 logger = getLogger(__name__)
