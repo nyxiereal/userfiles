@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.2.4
+// @version      1.2.5
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -2191,11 +2191,11 @@ Please perform the following:
     selectors: {
       questionContainer: 'div[data-testid="question-container-text"]',
       questionText:
-        'div[data-testid="question-container-text"] div#questionText p, div[data-cy="question-text-color"] p',
+        'div[data-testid="question-container-text"] .question-text-color',
       questionImage:
         'div[data-testid="question-container-text"] img, div[class*="question-media-container"] img, img[data-testid="question-container-image"], .question-image',
       optionButtons: "button.option",
-      optionText: "div#optionText p, .option-text p, .resizeable p",
+      optionText: "div#optionText div.resizeable, .option-text div.resizeable, div.resizeable",
       pageInfo: 'div.pill p, div[class*="question-counter"] p',
       quizContainer: "div[data-quesid]",
     },
