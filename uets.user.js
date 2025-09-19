@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.2.6
+// @version      1.2.7
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -1166,24 +1166,29 @@
   };
 
   const processProceedGameResponse = (data) => {
-    if (
-      data.question &&
-      data.question.structure &&
-      data.question.structure.answer !== undefined
-    ) {
-      const questionId = data.response.questionId;
-      let correctAnswer = data.question.structure.answer;
+    console.log("Processing proceedGame response:", data);
+    try {
+      var questionId = data.response.questionId;
+      var correctAnswer = data.question.structure.answer;
       if (correctAnswer == 0 && data.question.structure.options !== undefined) {
         correctAnswer = data.question.structure.options[0].text;
       }
-      console.log("Correct answer:", correctAnswer);
-      console.log(
-        "Sending correct answer to server:",
-        questionId,
-        correctAnswer,
-      );
-      sendAnswerToServer(questionId, correctAnswer);
     }
+    catch (e) {
+      var questionId = data.data.response.questionId;
+      var correctAnswer = data.data.question.structure.answer;
+      if (correctAnswer == 0 && data.data.question.structure.options !== undefined) {
+        correctAnswer = data.data.question.structure.options[0].text;
+      }
+    }
+    console.log("Correct answer:", correctAnswer);
+    console.log(
+      "Sending correct answer to server:",
+      questionId,
+      correctAnswer,
+    );
+    sendAnswerToServer(questionId, correctAnswer);
+
   };
 
   // === SPOOF FULLSCREEN AND FOCUS ===
@@ -2830,7 +2835,7 @@ Please perform the following:
 
     if (
       typeof url === "string" &&
-      url.includes("https://game.wayground.com/play-api/v4/proceedGame")
+      (url.includes("https://game.wayground.com/play-api/v4/proceedGame") || url.includes("https://game.wayground.com/play-api/v4/soloProceed"))
     ) {
       this.addEventListener("load", function () {
         if (this.status === 200) {
@@ -2859,7 +2864,7 @@ Please perform the following:
     if (
       this._method === "POST" &&
       this._url &&
-      this._url.includes("https://game.wayground.com/play-api/v4/proceedGame")
+      (this._url.includes("https://game.wayground.com/play-api/v4/proceedGame") || this._url.includes("https://game.wayground.com/play-api/v4/soloProceed"))
     ) {
       if (data) {
         try {
@@ -2922,7 +2927,7 @@ Please perform the following:
     // Intercept POST requests to proceedGame via fetch
     if (
       typeof url === "string" &&
-      url.includes("https://game.wayground.com/play-api/v4/proceedGame") &&
+      (url.includes("https://game.wayground.com/play-api/v4/proceedGame") || url.includes("https://game.wayground.com/play-api/v4/soloProceed")) &&
       options &&
       options.method === "POST" &&
       options.body
@@ -2989,7 +2994,7 @@ Please perform the following:
 
     if (
       typeof url === "string" &&
-      url.includes("https://game.wayground.com/play-api/v4/proceedGame")
+      (url.includes("https://game.wayground.com/play-api/v4/proceedGame") || url.includes("https://game.wayground.com/play-api/v4/soloProceed"))
     ) {
       return originalFetch.call(this, url, options).then((response) => {
         if (response.ok) {
