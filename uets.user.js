@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.2.5
+// @version      1.2.6
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -2757,10 +2757,18 @@ Please perform the following:
   // === SHARED QUIZ DATA PROCESSOR ===
   const processQuizData = (data) => {
     console.log("Trying to get all questions...");
-    const questionKeys = Object.keys(data.room.questions);
+    try {
+      var questionKeys = Object.keys(data.data.room.questions);
+    } catch (e) {
+      var questionKeys = Object.keys(data.room.questions);
+    }
     for (const questionKey of questionKeys) {
       console.log("----------------");
-      const questionData = data.room.questions[questionKey];
+      try {
+        var questionData = data.data.room.questions[questionKey];
+      } catch (e) {
+        var questionData = data.room.questions[questionKey];
+      }
       sharedState.quizData[questionKey] = questionData;
 
       // Store the complete question data in questionsPool
