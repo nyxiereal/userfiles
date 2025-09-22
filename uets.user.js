@@ -2809,7 +2809,8 @@ Please perform the following:
 
     if (
       typeof url === "string" &&
-      url.includes("https://game.wayground.com/play-api/createTestGameActivity")
+      (url.includes("https://game.wayground.com/play-api/createTestGameActivity") ||
+        url.includes("https://wayground.com/play-api/createTestGameActivity"))
     ) {
       this._blocked = true;
       GM_log("Blocked cheating detection request to createTestGameActivity");
@@ -2819,7 +2820,10 @@ Please perform the following:
       typeof url === "string" &&
       (url.includes("https://game.wayground.com/play-api/v4/soloJoin") ||
         url.includes("https://game.wayground.com/play-api/v6/rejoinGame") ||
-        url.includes("https://game.wayground.com/play-api/v5/join"))
+        url.includes("https://game.wayground.com/play-api/v5/join") ||
+        url.includes("https://wayground.com/play-api/v4/soloJoin") ||
+        url.includes("https://wayground.com/play-api/v6/rejoinGame") ||
+        url.includes("https://wayground.com/play-api/v5/join"))
     ) {
       this.addEventListener("load", function () {
         if (this.status === 200) {
@@ -2835,7 +2839,10 @@ Please perform the following:
 
     if (
       typeof url === "string" &&
-      (url.includes("https://game.wayground.com/play-api/v4/proceedGame") || url.includes("https://game.wayground.com/play-api/v4/soloProceed"))
+      (url.includes("https://game.wayground.com/play-api/v4/proceedGame") ||
+        url.includes("https://game.wayground.com/play-api/v4/soloProceed") ||
+        url.includes("https://wayground.com/play-api/v4/proceedGame") ||
+        url.includes("https://wayground.com/play-api/v4/soloProceed"))
     ) {
       this.addEventListener("load", function () {
         if (this.status === 200) {
@@ -2864,7 +2871,10 @@ Please perform the following:
     if (
       this._method === "POST" &&
       this._url &&
-      (this._url.includes("https://game.wayground.com/play-api/v4/proceedGame") || this._url.includes("https://game.wayground.com/play-api/v4/soloProceed"))
+      (this._url.includes("https://game.wayground.com/play-api/v4/proceedGame") ||
+        this._url.includes("https://game.wayground.com/play-api/v4/soloProceed") ||
+        this._url.includes("https://wayground.com/play-api/v4/proceedGame") ||
+        this._url.includes("https://wayground.com/play-api/v4/soloProceed"))
     ) {
       if (data) {
         try {
@@ -2916,7 +2926,8 @@ Please perform the following:
     // Block cheating detection requests
     if (
       typeof url === "string" &&
-      url.includes("https://game.wayground.com/play-api/createTestGameActivity")
+      (url.includes("https://game.wayground.com/play-api/createTestGameActivity") ||
+        url.includes("https://wayground.com/play-api/createTestGameActivity"))
     ) {
       GM_log("Blocked cheating detection request to createTestGameActivity");
       return Promise.resolve(
@@ -2927,7 +2938,10 @@ Please perform the following:
     // Intercept POST requests to proceedGame via fetch
     if (
       typeof url === "string" &&
-      (url.includes("https://game.wayground.com/play-api/v4/proceedGame") || url.includes("https://game.wayground.com/play-api/v4/soloProceed")) &&
+      (url.includes("https://game.wayground.com/play-api/v4/proceedGame") ||
+        url.includes("https://game.wayground.com/play-api/v4/soloProceed") ||
+        url.includes("https://wayground.com/play-api/v4/proceedGame") ||
+        url.includes("https://wayground.com/play-api/v4/soloProceed")) &&
       options &&
       options.method === "POST" &&
       options.body
@@ -2975,7 +2989,10 @@ Please perform the following:
       typeof url === "string" &&
       (url.includes("https://game.wayground.com/play-api/v4/soloJoin") ||
         url.includes("https://game.wayground.com/play-api/v6/rejoinGame") ||
-        url.includes("https://game.wayground.com/play-api/v5/join"))
+        url.includes("https://game.wayground.com/play-api/v5/join") ||
+        url.includes("https://wayground.com/play-api/v4/soloJoin") ||
+        url.includes("https://wayground.com/play-api/v6/rejoinGame") ||
+        url.includes("https://wayground.com/play-api/v5/join"))
     ) {
       return originalFetch.call(this, url, options).then((response) => {
         if (response.ok) {
@@ -2994,7 +3011,10 @@ Please perform the following:
 
     if (
       typeof url === "string" &&
-      (url.includes("https://game.wayground.com/play-api/v4/proceedGame") || url.includes("https://game.wayground.com/play-api/v4/soloProceed"))
+      (url.includes("https://game.wayground.com/play-api/v4/proceedGame") ||
+        url.includes("https://game.wayground.com/play-api/v4/soloProceed") ||
+        url.includes("https://wayground.com/play-api/v4/proceedGame") ||
+        url.includes("https://wayground.com/play-api/v4/soloProceed"))
     ) {
       return originalFetch.call(this, url, options).then((response) => {
         if (response.ok) {
