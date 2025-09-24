@@ -16,6 +16,8 @@ CORS(
         "https://*.wayground.com",
         "https://quizizz.com",
         "https://*.quizizz.com",
+        "https://*.kahoot.it",
+        "https://kahoot.it",
     ],
 )
 

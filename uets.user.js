@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.3.1
+// @version      1.3.2
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -1213,7 +1213,7 @@
         correctAnswer = data.data.question.structure.options[0].text;
       }
     }
-    GM_log("[*] Sending correct answer (${questionId} <${correctAnswer}>) to server");
+    GM_log(`[*] Sending correct answer (${questionId} <${correctAnswer}>) to server`);
     sendAnswerToServer(questionId, correctAnswer);
 
   };
