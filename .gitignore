@@ -5,4 +5,7 @@ uets-server/lib
 uets-server/lib64
 uets-server/CACHEDIR.TAG
 uets-server/pyvenv.cfg
+uets-server/ip_blacklist.json
 *.log
+__pycache__
+include

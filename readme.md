@@ -16,5 +16,5 @@ A multi-cheat tool for some educational platforms.
 ### UETS Server setup
 1. Install Python, alongside uv
 2. Install the dependencies with `uv pip install -r requirements.txt`
-3. Run the server with `uv run main.py`
+3. Run the server with `uv run main.py` (or `uv run uvicorn main:app --host 0.0.0.0 --port 5000 --reload`)
 4. The server will be running at `http://localhost:5000`, all answers will be stored in `quiz_data.json`. Logs will be stored in `uets-server.log`.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.3.0
+// @version      1.3.1
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -2529,6 +2529,14 @@ Please perform the following:
       (document.head || document.documentElement).appendChild(script);
       script.remove();
     `;
+
+      (document.head || document.documentElement).appendChild(script);
+      script.remove();
+      `;
+
+      (document.head || document.documentElement).appendChild(script);
+      script.remove();
+    `;
     },
 
     setupHTTPInterceptors: () => {
@@ -3363,8 +3371,8 @@ Please perform the following:
     // Intercept requests to reaction-update via fetch
     if (
       typeof url === "string" &&
-      (url.includes("wayground.com") || this._url.includes("quizizz.com")) &&
-      url.includes("_gameapi/main/public/v1/games/",) &&
+      (url.includes("wayground.com") || url.includes("quizizz.com")) && 
+      url.includes("_gameapi/main/public/v1/games/") &&
       url.includes("/reaction-update") &&
       options &&
       options.method === "POST" &&
