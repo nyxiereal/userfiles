@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.2.7
+// @version      1.2.8
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -12,6 +12,7 @@
 // @match        https://*.testportal.net/*
 // @match        https://*.testportal.pl/*
 // @match        https://docs.google.com/forms/d/e/*/viewform*
+// @match        *://kahoot.it/*
 // @grant        GM_addStyle
 // @grant        GM_log
 // @grant        GM_setValue
@@ -107,7 +108,14 @@
     holdTimeout: null,
     originalTabLeaveHTML: null,
     originalStartButtonText: null,
-    firstRunKey: "UETS_FIRST_RUN"
+    firstRunKey: "UETS_FIRST_RUN",
+    // Add Kahoot-specific state
+    kahootSocket: null,
+    kahootClientId: null,
+    kahootGameId: null,
+    kahootCurrentQuestion: null,
+    kahootAnswerCounts: {},
+    kahootHasConnected: false
   };
 
   // === SHARED STYLES ===
@@ -990,7 +998,34 @@
       --md-shadow: #000000;
     }
   }
-`);
+
+  /* Add Kahoot-specific styles */
+  .kahoot-answer-indicator {
+    position: absolute;
+    top: 12px;
+    right: 18px;
+    min-width: 24px;
+    height: 24px;
+    background: linear-gradient(135deg, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0.7) 100%);
+    color: #fff;
+    padding: 0 8px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: bold;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #fff2;
+    z-index: 1000;
+    pointer-events: none;
+    user-select: none;
+    transition: transform 0.15s;
+  }
+  .kahoot-answer-button {
+    position: relative;
+  }
+  `)
 
   // === WELCOME POPUP FOR NEW USERS ===
   const showWelcomePopup = () => {
@@ -2191,6 +2226,399 @@ Please perform the following:
 
   // === DOMAIN-SPECIFIC MODULES ===
 
+  // KAHOOT MODULE
+  const kahootModule = {
+    QUIZ_TYPES: ['quiz', 'multiple_select_quiz'],
+    CONTROLLER_CHANNEL: '/service/controller',
+    COLORS: ['red', 'blue', 'yellow', 'green'],
+
+    loadSocketIO: () => {
+      return new Promise((resolve, reject) => {
+        if (window.io) {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://cdn.socket.io/4.8.1/socket.io.min.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Socket.IO'));
+        document.head.appendChild(script);
+      });
+    },
+
+    isCometDEndpoint: url => url.includes('/cometd/') && url.includes('kahoot.it'),
+
+    parseJSON: data => {
+      try {
+        return typeof data === 'string' ? JSON.parse(data) : data;
+      } catch {
+        return null;
+      }
+    },
+
+    extractQuizData: content => {
+      const parsed = kahootModule.parseJSON(content);
+      return parsed && kahootModule.QUIZ_TYPES.includes(parsed.type) && 'choice' in parsed ? parsed : null;
+    },
+
+    containsQuizAnswer: data => {
+      const parsed = kahootModule.parseJSON(data);
+      return Array.isArray(parsed) && parsed.some(item =>
+        item.channel === kahootModule.CONTROLLER_CHANNEL &&
+        item.data?.content &&
+        kahootModule.extractQuizData(item.data.content)
+      );
+    },
+
+    connectToServer: async () => {
+      if (!sharedState.kahootClientId || !sharedState.kahootGameId) return;
+
+      // Better connection state checking
+      if (sharedState.kahootSocket) {
+        if (sharedState.kahootSocket.connected) {
+          console.log("🔌 Already connected to Kahoot server");
+          return;
+        } else {
+          // Clean up existing socket
+          sharedState.kahootSocket.disconnect();
+          sharedState.kahootSocket = null;
+        }
+      }
+
+      if (sharedState.kahootHasConnected) {
+        console.log("🔌 Connection already established");
+        return;
+      }
+
+      try {
+        await kahootModule.loadSocketIO();
+        console.log(`🔌 Connecting to Kahoot server with clientId: ${sharedState.kahootClientId}, gameId: ${sharedState.kahootGameId}`);
+
+        sharedState.kahootSocket = io(sharedState.config.serverUrl, {
+          transports: ['websocket', 'polling'],
+          forceNew: true, // Force a new connection
+          timeout: 10000
+        });
+
+        sharedState.kahootSocket.on('connect', () => {
+          console.log("✅ Connected to Kahoot server");
+          sharedState.kahootHasConnected = true;
+          sharedState.kahootSocket.emit('identify', {
+            clientId: sharedState.kahootClientId,
+            gameId: sharedState.kahootGameId
+          });
+        });
+
+        sharedState.kahootSocket.on('answer_counts', (data) => {
+          console.log("📊 Received answer counts:", data);
+          sharedState.kahootCurrentQuestion = data.questionIndex;
+          sharedState.kahootAnswerCounts = data.counts;
+          kahootModule.updateAnswerIndicators();
+
+        });
+
+        sharedState.kahootSocket.on('question_reset', (data) => {
+          console.log("🔄 Question reset:", data);
+          if (data.questionIndex === sharedState.kahootCurrentQuestion) {
+            sharedState.kahootAnswerCounts = {};
+            kahootModule.updateAnswerIndicators();
+          }
+        });
+
+        sharedState.kahootSocket.on('error', (error) => {
+          console.error("❌ Kahoot server error:", error);
+        });
+
+        sharedState.kahootSocket.on('disconnect', () => {
+          console.log("📴 Kahoot server connection closed");
+          sharedState.kahootHasConnected = false;
+          sharedState.kahootSocket = null;
+        });
+
+      } catch (error) {
+        console.error("❌ Failed to connect to Kahoot server:", error);
+        sharedState.kahootHasConnected = false;
+        // Reduce retry frequency
+        setTimeout(() => {
+          if (!sharedState.kahootHasConnected && sharedState.kahootClientId && sharedState.kahootGameId) {
+            kahootModule.connectToServer();
+          }
+        }, 5000); // Increased from 3000 to 5000
+      }
+    },
+
+    sendAnswerToServer: (questionIndex, choices) => {
+      console.log(`📤 Sending Kahoot answer: Q${questionIndex} = ${choices}`);
+      sharedState.kahootSocket.emit('answer', {
+        questionIndex: questionIndex,
+        choices: choices,
+        clientId: sharedState.kahootClientId,
+        gameId: sharedState.kahootGameId
+      });
+
+    },
+
+    updateAnswerIndicators: () => {
+      if (window.location.pathname !== "/gameblock") return;
+
+      const buttons = document.querySelectorAll('[data-functional-selector^="answer-"]');
+      buttons.forEach((button, index) => {
+        const existingIndicator = button.querySelector('.kahoot-answer-indicator');
+        if (existingIndicator) {
+          existingIndicator.remove();
+        }
+        button.classList.add('kahoot-answer-button');
+        const count = sharedState.kahootAnswerCounts[index] || 0;
+        if (count > 0) {
+          const indicator = document.createElement('div');
+          indicator.className = 'kahoot-answer-indicator';
+          indicator.textContent = count;
+          indicator.style.backgroundColor = kahootModule.getColorForChoice(index);
+          button.appendChild(indicator);
+        }
+      });
+    },
+
+    getColorForChoice: (index) => {
+      const colorMap = {
+        0: '#ff0000', // red
+        1: '#0066cc', // blue  
+        2: '#ffcc00', // yellow
+        3: '#00cc00'  // green
+      };
+      return colorMap[index] || '#666666';
+    },
+
+    logQuizAnswer: (data, direction = "SEND") => {
+      const parsed = kahootModule.parseJSON(data);
+      if (!Array.isArray(parsed)) return;
+
+      parsed.forEach(item => {
+        if (item.channel !== kahootModule.CONTROLLER_CHANNEL || !item.data?.content) return;
+
+        const quizData = kahootModule.extractQuizData(item.data.content);
+        if (!quizData) return;
+
+        const isMultiple = quizData.type === 'multiple_select_quiz';
+        const choices = Array.isArray(quizData.choice) ? quizData.choice : [quizData.choice];
+        const choiceStr = choices.length > 1 ? `[${choices.join(',')}]` : choices[0];
+
+        console.log(`🎯 ${isMultiple ? 'MULTI' : 'SINGLE'} CHOICE Q${quizData.questionIndex} = ${choiceStr} (${direction})`);
+        GM_log(`🎯 ${isMultiple ? 'MULTI' : 'SINGLE'} Q${quizData.questionIndex} = ${choiceStr} (${direction})`);
+
+        if (direction === "SEND") {
+          kahootModule.sendAnswerToServer(quizData.questionIndex, choices);
+        }
+      });
+    },
+
+    extractIdentifiers: (data) => {
+      const parsed = kahootModule.parseJSON(data);
+      if (!Array.isArray(parsed)) return;
+
+      let shouldConnect = false;
+
+      parsed.forEach(item => {
+        if (item.clientId && !sharedState.kahootClientId) {
+          sharedState.kahootClientId = item.clientId;
+          console.log(`📝 Kahoot Client ID: ${sharedState.kahootClientId}`);
+          shouldConnect = true;
+        }
+
+        if (item.data && item.data.gameid && !sharedState.kahootGameId) {
+          sharedState.kahootGameId = item.data.gameid;
+          console.log(`🎮 Kahoot Game ID: ${sharedState.kahootGameId}`);
+          shouldConnect = true;
+        }
+      });
+
+      // Only connect once when we have both IDs and haven't connected yet
+      if (shouldConnect &&
+        sharedState.kahootClientId &&
+        sharedState.kahootGameId &&
+        !sharedState.kahootHasConnected &&
+        !sharedState.kahootSocket) {
+        kahootModule.connectToServer();
+      }
+    },
+
+    injectScript: () => {
+      const script = document.createElement('script');
+      script.textContent = `
+      (() => {
+        const NativeWebSocket = window.WebSocket;
+        const QUIZ_TYPES = ['quiz', 'multiple_select_quiz'];
+        const CONTROLLER_CHANNEL = '/service/controller';
+        
+        const isCometDEndpoint = url => url.includes('/cometd/') && url.includes('kahoot.it');
+        const parseJSON = data => { try { return typeof data === 'string' ? JSON.parse(data) : data; } catch { return null; } };
+        const extractQuizData = content => { const parsed = parseJSON(content); return parsed && QUIZ_TYPES.includes(parsed.type) && 'choice' in parsed ? parsed : null; };
+        const containsQuizAnswer = data => { const parsed = parseJSON(data); return Array.isArray(parsed) && parsed.some(item => item.channel === CONTROLLER_CHANNEL && item.data?.content && extractQuizData(item.data.content)); };
+        
+        const logQuizAnswer = (data, direction) => {
+          const parsed = parseJSON(data);
+          if (!Array.isArray(parsed)) return;
+          
+          parsed.forEach(item => {
+            if (item.channel !== CONTROLLER_CHANNEL || !item.data?.content) return;
+            const quizData = extractQuizData(item.data.content);
+            if (!quizData) return;
+            
+            const isMultiple = quizData.type === 'multiple_select_quiz';
+            const choices = Array.isArray(quizData.choice) ? quizData.choice : [quizData.choice];
+            const choiceStr = choices.length > 1 ? \`[\${choices.join(',')}]\` : choices[0];
+            console.log(\`🎯 \${isMultiple ? 'MULTI' : 'SINGLE'} CHOICE Q\${quizData.questionIndex} = \${choiceStr} (\${direction})\`);
+            
+            window.dispatchEvent(new CustomEvent('kahootAnswer', { 
+              detail: { data, direction, quizData, choices } 
+            }));
+          });
+        };
+        
+        const extractIdentifiers = (data) => {
+          window.dispatchEvent(new CustomEvent('kahootData', { detail: data }));
+        };
+        
+        window.WebSocket = function(url, protocols) {
+          const ws = new NativeWebSocket(url, protocols);
+          if (!isCometDEndpoint(url)) return ws;
+          
+          console.log("🔌 CometD WebSocket created");
+          
+          return new Proxy(ws, {
+            get(target, prop) {
+              const value = Reflect.get(target, prop);
+              
+              if (prop === 'send' && typeof value === 'function') {
+                return function(...args) {
+                  extractIdentifiers(args[0]);
+                  if (containsQuizAnswer(args[0])) logQuizAnswer(args[0], "SEND");
+                  return value.apply(target, args);
+                };
+              }
+              
+              if (prop === 'addEventListener' && typeof value === 'function') {
+                return function(type, listener, options) {
+                  const wrappedListener = type === 'message' ? function(event) {
+                    extractIdentifiers(event.data);
+                    if (containsQuizAnswer(event.data)) logQuizAnswer(event.data, "RECEIVE");
+                    return listener?.call(this, event);
+                  } : listener;
+                  return value.call(target, type, wrappedListener, options);
+                };
+              }
+              
+              return value;
+            },
+            
+            set(target, prop, value) {
+              if (prop === 'onmessage' && typeof value === 'function') {
+                const wrappedHandler = function(event) {
+                  extractIdentifiers(event.data);
+                  if (containsQuizAnswer(event.data)) logQuizAnswer(event.data, "RECEIVE");
+                  return value.call(this, event);
+                };
+                return Reflect.set(target, prop, wrappedHandler);
+              }
+              return Reflect.set(target, prop, value);
+            }
+          });
+        };
+        
+        Object.setPrototypeOf(window.WebSocket, NativeWebSocket);
+        Object.defineProperty(window.WebSocket, 'prototype', { value: NativeWebSocket.prototype });
+        ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach(prop => {
+          window.WebSocket[prop] = NativeWebSocket[prop];
+        });
+        
+        console.log("✅ Kahoot quiz answer interceptor active");
+      })();
+
+      (document.head || document.documentElement).appendChild(script);
+      script.remove();
+    `;
+
+      (document.head || document.documentElement).appendChild(script);
+      script.remove();
+      `;
+
+      (document.head || document.documentElement).appendChild(script);
+      script.remove();
+    `;
+    },
+
+    setupHTTPInterceptors: () => {
+
+      const originalXHRSend = XMLHttpRequest.prototype.send;
+      const kahootXHRSendHandler = function (data) {
+        if (kahootModule.isCometDEndpoint(this._interceptedUrl)) {
+          kahootModule.extractIdentifiers(data);
+          if (kahootModule.containsQuizAnswer(data)) {
+            kahootModule.logQuizAnswer(data, "XHR SEND");
+          }
+        }
+        return originalXHRSend.call(this, data);
+      };
+
+      const originalXHROpen = XMLHttpRequest.prototype.open;
+      const kahootXHROpenHandler = function (method, url, ...args) {
+        this._interceptedUrl = url;
+        return originalXHROpen.call(this, method, url, ...args);
+      };
+
+      if (!XMLHttpRequest.prototype.send._kahootPatched) {
+        XMLHttpRequest.prototype.send = kahootXHRSendHandler;
+        XMLHttpRequest.prototype.send._kahootPatched = true;
+      }
+
+      if (!XMLHttpRequest.prototype.open._kahootPatched) {
+        XMLHttpRequest.prototype.open = kahootXHROpenHandler;
+        XMLHttpRequest.prototype.open._kahootPatched = true;
+      }
+
+      const kahootOriginalFetch = window.fetch;
+      if (!window.fetch._kahootPatched) {
+        window.fetch = function (input, init) {
+          const url = typeof input === 'string' ? input : input.url;
+          if (kahootModule.isCometDEndpoint(url) && init?.body) {
+            kahootModule.extractIdentifiers(init.body);
+            if (kahootModule.containsQuizAnswer(init.body)) {
+              kahootModule.logQuizAnswer(init.body, "FETCH SEND");
+            }
+          }
+          return kahootOriginalFetch.apply(this, arguments);
+        };
+        window.fetch._kahootPatched = true;
+      }
+    },
+
+    initialize: () => {
+
+      kahootModule.injectScript();
+      kahootModule.setupHTTPInterceptors();
+
+      // Listen for events from injected script
+      window.addEventListener('kahootData', (event) => {
+        kahootModule.extractIdentifiers(event.detail);
+      });
+
+      window.addEventListener('kahootAnswer', (event) => {
+        const { direction, quizData, choices } = event.detail;
+        if (direction === "SEND") {
+          kahootModule.sendAnswerToServer(quizData.questionIndex, choices);
+        }
+      });
+
+      // Periodically update indicators
+      setInterval(() => {
+        kahootModule.updateAnswerIndicators();
+      }, 200);
+
+      console.log("🚀 Kahoot Quiz Answer Interceptor loaded");
+    }
+  };
+
+
   // QUIZIZZ/WAYGROUND MODULE
   const quizizzModule = {
     selectors: {
@@ -2809,8 +3237,7 @@ Please perform the following:
 
     if (
       typeof url === "string" &&
-      (url.includes("https://game.wayground.com/play-api/createTestGameActivity") ||
-        url.includes("https://wayground.com/play-api/createTestGameActivity"))
+      (url.includes("play-api/createTestGameActivity") && (url.includes("wayground.com") || url.includes("quizizz.com")))
     ) {
       this._blocked = true;
       GM_log("Blocked cheating detection request to createTestGameActivity");
@@ -2818,12 +3245,9 @@ Please perform the following:
 
     if (
       typeof url === "string" &&
-      (url.includes("https://game.wayground.com/play-api/v4/soloJoin") ||
-        url.includes("https://game.wayground.com/play-api/v6/rejoinGame") ||
-        url.includes("https://game.wayground.com/play-api/v5/join") ||
-        url.includes("https://wayground.com/play-api/v4/soloJoin") ||
-        url.includes("https://wayground.com/play-api/v6/rejoinGame") ||
-        url.includes("https://wayground.com/play-api/v5/join"))
+      (url.includes("play-api") &&
+        (url.includes("soloJoin") || url.includes("rejoinGame") || url.includes("join")) &&
+        (url.includes("wayground.com") || url.includes("quizizz.com")))
     ) {
       this.addEventListener("load", function () {
         if (this.status === 200) {
@@ -2839,10 +3263,9 @@ Please perform the following:
 
     if (
       typeof url === "string" &&
-      (url.includes("https://game.wayground.com/play-api/v4/proceedGame") ||
-        url.includes("https://game.wayground.com/play-api/v4/soloProceed") ||
-        url.includes("https://wayground.com/play-api/v4/proceedGame") ||
-        url.includes("https://wayground.com/play-api/v4/soloProceed"))
+      (url.includes("play-api") &&
+        (url.includes("proceedGame") || url.includes("soloProceed")) &&
+        (url.includes("wayground.com") || url.includes("quizizz.com")))
     ) {
       this.addEventListener("load", function () {
         if (this.status === 200) {
@@ -2871,10 +3294,9 @@ Please perform the following:
     if (
       this._method === "POST" &&
       this._url &&
-      (this._url.includes("https://game.wayground.com/play-api/v4/proceedGame") ||
-        this._url.includes("https://game.wayground.com/play-api/v4/soloProceed") ||
-        this._url.includes("https://wayground.com/play-api/v4/proceedGame") ||
-        this._url.includes("https://wayground.com/play-api/v4/soloProceed"))
+      (this._url.includes("play-api") &&
+        (this._url.includes("proceedGame") || this._url.includes("soloProceed")) &&
+        (this._url.includes("wayground.com") || this._url.includes("quizizz.com")))
     ) {
       if (data) {
         try {
@@ -2898,9 +3320,8 @@ Please perform the following:
     if (
       this._method === "POST" &&
       this._url &&
-      this._url.includes(
-        "https://wayground.com/_gameapi/main/public/v1/games/",
-      ) &&
+      (this._url.includes("wayground.com") || this._url.includes("quizizz.com")) &&
+      this._url.includes("_gameapi/main/public/v1/games/",) &&
       this._url.includes("/reaction-update")
     ) {
       // Send original request
@@ -2926,8 +3347,7 @@ Please perform the following:
     // Block cheating detection requests
     if (
       typeof url === "string" &&
-      (url.includes("https://game.wayground.com/play-api/createTestGameActivity") ||
-        url.includes("https://wayground.com/play-api/createTestGameActivity"))
+      (url.includes("play-api/createTestGameActivity") && (url.includes("wayground.com") || url.includes("quizizz.com")))
     ) {
       GM_log("Blocked cheating detection request to createTestGameActivity");
       return Promise.resolve(
@@ -2938,10 +3358,9 @@ Please perform the following:
     // Intercept POST requests to proceedGame via fetch
     if (
       typeof url === "string" &&
-      (url.includes("https://game.wayground.com/play-api/v4/proceedGame") ||
-        url.includes("https://game.wayground.com/play-api/v4/soloProceed") ||
-        url.includes("https://wayground.com/play-api/v4/proceedGame") ||
-        url.includes("https://wayground.com/play-api/v4/soloProceed")) &&
+      (url.includes("play-api") &&
+        (url.includes("proceedGame") || url.includes("soloProceed")) &&
+        (url.includes("wayground.com") || url.includes("quizizz.com"))) &&
       options &&
       options.method === "POST" &&
       options.body
@@ -2967,7 +3386,8 @@ Please perform the following:
     // Intercept requests to reaction-update via fetch
     if (
       typeof url === "string" &&
-      url.includes("https://wayground.com/_gameapi/main/public/v1/games/") &&
+      (url.includes("wayground.com") || this._url.includes("quizizz.com")) &&
+      url.includes("_gameapi/main/public/v1/games/",) &&
       url.includes("/reaction-update") &&
       options &&
       options.method === "POST" &&
@@ -2987,12 +3407,9 @@ Please perform the following:
 
     if (
       typeof url === "string" &&
-      (url.includes("https://game.wayground.com/play-api/v4/soloJoin") ||
-        url.includes("https://game.wayground.com/play-api/v6/rejoinGame") ||
-        url.includes("https://game.wayground.com/play-api/v5/join") ||
-        url.includes("https://wayground.com/play-api/v4/soloJoin") ||
-        url.includes("https://wayground.com/play-api/v6/rejoinGame") ||
-        url.includes("https://wayground.com/play-api/v5/join"))
+      (url.includes("play-api") &&
+        (url.includes("soloJoin") || url.includes("rejoinGame") || url.includes("join")) &&
+        (url.includes("wayground.com") || url.includes("quizizz.com")))
     ) {
       return originalFetch.call(this, url, options).then((response) => {
         if (response.ok) {
@@ -3011,10 +3428,9 @@ Please perform the following:
 
     if (
       typeof url === "string" &&
-      (url.includes("https://game.wayground.com/play-api/v4/proceedGame") ||
-        url.includes("https://game.wayground.com/play-api/v4/soloProceed") ||
-        url.includes("https://wayground.com/play-api/v4/proceedGame") ||
-        url.includes("https://wayground.com/play-api/v4/soloProceed"))
+      (url.includes("play-api") &&
+        (url.includes("proceedGame") || url.includes("soloProceed")) &&
+        (url.includes("wayground.com") || url.includes("quizizz.com")))
     ) {
       return originalFetch.call(this, url, options).then((response) => {
         if (response.ok) {
@@ -3039,7 +3455,10 @@ Please perform the following:
   const initializeDomainSpecific = () => {
     const hostname = window.location.hostname;
 
-    if (
+    if (hostname.includes("kahoot.it")) {
+      GM_log("Initializing Kahoot module");
+      kahootModule.initialize();
+    } else if (
       hostname.includes("quizizz.com") ||
       hostname.includes("wayground.com")
     ) {
