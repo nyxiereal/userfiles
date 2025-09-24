@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.2.8
+// @version      1.3.0
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -11,7 +11,7 @@
 // @match        https://*.wayground.com/*
 // @match        https://*.testportal.net/*
 // @match        https://*.testportal.pl/*
-// @match        https://docs.google.com/forms/d/e/*/viewform*
+// @match        https://docs.google.com/forms/*
 // @match        *://kahoot.it/*
 // @grant        GM_addStyle
 // @grant        GM_log
@@ -22,7 +22,7 @@
 // @grant        GM_setClipboard
 // @connect      *
 // @downloadURL  https://raw.githubusercontent.com/nyxiereal/userfiles/master/uets.user.js
-// @updateURL    https://raw.githubusercontent.com/nyxiereal/userfiles/master/uets.user.js
+// @updateURL    https://raw.githubusercontent.com/nyxiereal/userfiles/master/uets.meta.js
 // ==/UserScript==
 
 (function () {
@@ -109,7 +109,6 @@
     originalTabLeaveHTML: null,
     originalStartButtonText: null,
     firstRunKey: "UETS_FIRST_RUN",
-    // Add Kahoot-specific state
     kahootSocket: null,
     kahootClientId: null,
     kahootGameId: null,
@@ -1162,7 +1161,7 @@
                 : [],
             );
             if (response && response.hasAnswer) {
-              console.log("Received answer from server:", response);
+              GM_log("[*] Received answer from server:", response);
               highlightCorrectAnswers(
                 response.correctAnswers,
                 response.questionType,
@@ -1185,9 +1184,6 @@
     if (data.response && data.response.timeTaken !== undefined && sharedState.config.enableTimeTakenEdit) {
       const timetakenforce =
         Math.floor(Math.random() * (sharedState.config.timeTakenMax - sharedState.config.timeTakenMin + 1)) + sharedState.config.timeTakenMin;
-      console.log(
-        `Changing timeTaken from ${data.response.timeTaken} to ${timetakenforce}`,
-      );
       data.response.timeTaken = timetakenforce;
 
       if (sharedState.config.enableTimerHijack) {
@@ -1195,13 +1191,14 @@
         data.response.provisional.scoreBreakups.correct.total = sharedState.config.timerBonusPoints + data.response.provisional.scoreBreakups.correct.base + data.response.provisional.scoreBreakups.correct.streak;
         data.response.provisional.scores.correct = sharedState.config.timerBonusPoints + data.response.provisional.scoreBreakups.correct.base + data.response.provisional.scoreBreakups.correct.streak;
       }
-      console.log("Modified proceedGame request data:", data);
+      GM_log(
+        `[+] timeTaken modified from ${data.response.timeTaken} to ${timetakenforce}`,
+      );
     }
     return data;
   };
 
   const processProceedGameResponse = (data) => {
-    console.log("Processing proceedGame response:", data);
     try {
       var questionId = data.response.questionId;
       var correctAnswer = data.question.structure.answer;
@@ -1216,12 +1213,7 @@
         correctAnswer = data.data.question.structure.options[0].text;
       }
     }
-    console.log("Correct answer:", correctAnswer);
-    console.log(
-      "Sending correct answer to server:",
-      questionId,
-      correctAnswer,
-    );
+    GM_log("[*] Sending correct answer (${questionId} <${correctAnswer}>) to server");
     sendAnswerToServer(questionId, correctAnswer);
 
   };
@@ -1282,7 +1274,7 @@
     // Initial check
     removeToastManager();
 
-    GM_log("Fullscreen and focus spoofing enabled.");
+    GM_log("[+] Fullscreen and focus spoofing enabled.");
   };
 
   // === SERVER COMMUNICATION ===
@@ -1295,7 +1287,7 @@
       });
       return await response.json();
     } catch (error) {
-      GM_log("Error sending question to server:", error);
+      GM_log("[!] Error sending question to server:", error);
       return null;
     }
   };
@@ -1309,7 +1301,7 @@
       });
       return await response.json();
     } catch (error) {
-      GM_log("Error sending answer to server:", error);
+      GM_log("[!] Error sending answer to server:", error);
       return null;
     }
   };
@@ -1486,7 +1478,7 @@
 
     <div class="uets-card" style="margin-top: 6px; margin-left: 4px; margin-right: 4px;">
       <div class="uets-config-section">
-        <div class="uets-config-section-title">Wayground/Quizizz Settings</div>
+        <div class="uets-config-section-title">Wayground Settings</div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
             <button class="uets-config-info" data-info="Allows you to spoof the time taken to answer a question. You have 20 seconds to get a ~100-400 point bonus per question, this option forces the site to give you bonus points." title="Info"></button>
@@ -1762,7 +1754,7 @@
     if (newKey !== null) {
       GM_setValue(GEMINI_API_KEY_STORAGE, newKey.trim());
       sharedState.config.geminiApiKey = newKey.trim();
-      GM_log("Gemini API Key updated.");
+      GM_log("[+] Gemini API Key updated.");
       alert("Gemini API Key saved!");
     }
   });
@@ -1823,7 +1815,7 @@
         models.push(...filteredModels);
         pageToken = response.nextPageToken;
       } catch (error) {
-        GM_log("Error fetching Gemini models:", error);
+        GM_log("[!] Error fetching Gemini models:", error);
         break;
       }
     } while (pageToken);
@@ -1843,7 +1835,7 @@
   // === SHARED IMAGE FETCHING ===
   const fetchImageAsBase64 = (imageUrl) =>
     new Promise((resolve, reject) => {
-      GM_log(`Fetching image: ${imageUrl}`);
+      GM_log(`[*] Fetching image: ${imageUrl}...`);
       GM_xmlhttpRequest({
         method: "GET",
         url: imageUrl,
@@ -1859,7 +1851,7 @@
                 dataUrl.indexOf(";"),
               );
               const base64Data = dataUrl.substring(dataUrl.indexOf(",") + 1);
-              GM_log(`Image fetched successfully. MIME type: ${mimeType}`);
+              GM_log(`[+] Image fetched successfully. MIME type: ${mimeType}`);
               resolve({ base64Data, mimeType });
             };
             reader.onerror = () =>
@@ -1967,7 +1959,6 @@ Please perform the following:
       onload: (response) => {
         try {
           const result = JSON.parse(response.responseText);
-          console.log("Gemini API Response:", result);
           if (
             result.candidates &&
             result.candidates.length > 0 &&
@@ -1976,8 +1967,10 @@ Please perform the following:
             result.candidates[0].content.parts.length > 0
           ) {
             const geminiText = result.candidates[0].content.parts[0].text;
+            GM_log("[+] Gemini API Response:", geminiText);
             showResponsePopup(geminiText, false, "AI Assistant");
           } else if (result.error) {
+            GM_log("[!] Gemini API Error:", result.error.message);
             showResponsePopup(
               `Gemini API Error: ${result.error.message}`,
               false,
@@ -2276,7 +2269,7 @@ Please perform the following:
       // Better connection state checking
       if (sharedState.kahootSocket) {
         if (sharedState.kahootSocket.connected) {
-          console.log("🔌 Already connected to Kahoot server");
+          GM_log("[*] Already connected to UETS-server");
           return;
         } else {
           // Clean up existing socket
@@ -2286,13 +2279,13 @@ Please perform the following:
       }
 
       if (sharedState.kahootHasConnected) {
-        console.log("🔌 Connection already established");
+        GM_log("[*] Connection already established to UETS-server");
         return;
       }
 
       try {
         await kahootModule.loadSocketIO();
-        console.log(`🔌 Connecting to Kahoot server with clientId: ${sharedState.kahootClientId}, gameId: ${sharedState.kahootGameId}`);
+        GM_log(`[*] Connecting to UETS-server with clientId: ${sharedState.kahootClientId}, gameId: ${sharedState.kahootGameId}`);
 
         sharedState.kahootSocket = io(sharedState.config.serverUrl, {
           transports: ['websocket', 'polling'],
@@ -2301,7 +2294,7 @@ Please perform the following:
         });
 
         sharedState.kahootSocket.on('connect', () => {
-          console.log("✅ Connected to Kahoot server");
+          GM_log("[+] Connected to UETS-server");
           sharedState.kahootHasConnected = true;
           sharedState.kahootSocket.emit('identify', {
             clientId: sharedState.kahootClientId,
@@ -2310,7 +2303,7 @@ Please perform the following:
         });
 
         sharedState.kahootSocket.on('answer_counts', (data) => {
-          console.log("📊 Received answer counts:", data);
+          GM_log("[*] Received answer counts:", data);
           sharedState.kahootCurrentQuestion = data.questionIndex;
           sharedState.kahootAnswerCounts = data.counts;
           kahootModule.updateAnswerIndicators();
@@ -2318,7 +2311,7 @@ Please perform the following:
         });
 
         sharedState.kahootSocket.on('question_reset', (data) => {
-          console.log("🔄 Question reset:", data);
+          GM_log("[*] Question reset:", data);
           if (data.questionIndex === sharedState.kahootCurrentQuestion) {
             sharedState.kahootAnswerCounts = {};
             kahootModule.updateAnswerIndicators();
@@ -2326,17 +2319,17 @@ Please perform the following:
         });
 
         sharedState.kahootSocket.on('error', (error) => {
-          console.error("❌ Kahoot server error:", error);
+          GM_log("[!] Kahoot server error:", error);
         });
 
         sharedState.kahootSocket.on('disconnect', () => {
-          console.log("📴 Kahoot server connection closed");
+          GM_log("[!] Kahoot server connection closed");
           sharedState.kahootHasConnected = false;
           sharedState.kahootSocket = null;
         });
 
       } catch (error) {
-        console.error("❌ Failed to connect to Kahoot server:", error);
+        GM_log("[!] Failed to connect to UETS-server:", error);
         sharedState.kahootHasConnected = false;
         // Reduce retry frequency
         setTimeout(() => {
@@ -2348,7 +2341,7 @@ Please perform the following:
     },
 
     sendAnswerToServer: (questionIndex, choices) => {
-      console.log(`📤 Sending Kahoot answer: Q${questionIndex} = ${choices}`);
+      GM_log(`[*] Sending Kahoot answer: Q${questionIndex} = ${choices}`);
       sharedState.kahootSocket.emit('answer', {
         questionIndex: questionIndex,
         choices: choices,
@@ -2403,8 +2396,7 @@ Please perform the following:
         const choices = Array.isArray(quizData.choice) ? quizData.choice : [quizData.choice];
         const choiceStr = choices.length > 1 ? `[${choices.join(',')}]` : choices[0];
 
-        console.log(`🎯 ${isMultiple ? 'MULTI' : 'SINGLE'} CHOICE Q${quizData.questionIndex} = ${choiceStr} (${direction})`);
-        GM_log(`🎯 ${isMultiple ? 'MULTI' : 'SINGLE'} Q${quizData.questionIndex} = ${choiceStr} (${direction})`);
+        GM_log(`[*] ${isMultiple ? 'MULTI' : 'SINGLE'} Q${quizData.questionIndex} = ${choiceStr} (${direction})`);
 
         if (direction === "SEND") {
           kahootModule.sendAnswerToServer(quizData.questionIndex, choices);
@@ -2421,13 +2413,13 @@ Please perform the following:
       parsed.forEach(item => {
         if (item.clientId && !sharedState.kahootClientId) {
           sharedState.kahootClientId = item.clientId;
-          console.log(`📝 Kahoot Client ID: ${sharedState.kahootClientId}`);
+          GM_log(`[*] Kahoot Client ID: ${sharedState.kahootClientId}`);
           shouldConnect = true;
         }
 
         if (item.data && item.data.gameid && !sharedState.kahootGameId) {
           sharedState.kahootGameId = item.data.gameid;
-          console.log(`🎮 Kahoot Game ID: ${sharedState.kahootGameId}`);
+          GM_log(`[*] Kahoot Game ID: ${sharedState.kahootGameId}`);
           shouldConnect = true;
         }
       });
@@ -2467,7 +2459,7 @@ Please perform the following:
             const isMultiple = quizData.type === 'multiple_select_quiz';
             const choices = Array.isArray(quizData.choice) ? quizData.choice : [quizData.choice];
             const choiceStr = choices.length > 1 ? \`[\${choices.join(',')}]\` : choices[0];
-            console.log(\`🎯 \${isMultiple ? 'MULTI' : 'SINGLE'} CHOICE Q\${quizData.questionIndex} = \${choiceStr} (\${direction})\`);
+            console.log(\`[*] \${isMultiple ? 'MULTI' : 'SINGLE'} CHOICE Q\${quizData.questionIndex} = \${choiceStr} (\${direction})\`);
             
             window.dispatchEvent(new CustomEvent('kahootAnswer', { 
               detail: { data, direction, quizData, choices } 
@@ -2483,7 +2475,7 @@ Please perform the following:
           const ws = new NativeWebSocket(url, protocols);
           if (!isCometDEndpoint(url)) return ws;
           
-          console.log("🔌 CometD WebSocket created");
+          console.log("[+] CometD WebSocket created");
           
           return new Proxy(ws, {
             get(target, prop) {
@@ -2531,16 +2523,8 @@ Please perform the following:
           window.WebSocket[prop] = NativeWebSocket[prop];
         });
         
-        console.log("✅ Kahoot quiz answer interceptor active");
+        console.log("[+] Kahoot quiz answer interceptor active");
       })();
-
-      (document.head || document.documentElement).appendChild(script);
-      script.remove();
-    `;
-
-      (document.head || document.documentElement).appendChild(script);
-      script.remove();
-      `;
 
       (document.head || document.documentElement).appendChild(script);
       script.remove();
@@ -2613,14 +2597,12 @@ Please perform the following:
       setInterval(() => {
         kahootModule.updateAnswerIndicators();
       }, 200);
-
-      console.log("🚀 Kahoot Quiz Answer Interceptor loaded");
     }
   };
 
 
-  // QUIZIZZ/WAYGROUND MODULE
-  const quizizzModule = {
+  // WAYGROUND MODULE
+  const waygroundModule = {
     selectors: {
       questionContainer: 'div[data-testid="question-container-text"]',
       questionText:
@@ -2645,7 +2627,7 @@ Please perform the following:
 
     getCurrentQuestionId: () => {
       const quizContainer = document.querySelector(
-        quizizzModule.selectors.quizContainer,
+        waygroundModule.selectors.quizContainer,
       );
       return quizContainer ? quizContainer.getAttribute("data-quesid") : null;
     },
@@ -2673,7 +2655,7 @@ Please perform the following:
         },
       );
 
-      const currentQuestionId = quizizzModule.getCurrentQuestionId();
+      const currentQuestionId = waygroundModule.getCurrentQuestionId();
       if (currentQuestionId !== sharedState.currentQuestionId) {
         sharedState.currentQuestionId = currentQuestionId;
 
@@ -2701,7 +2683,7 @@ Please perform the following:
       let questionImageUrl = null;
 
       const questionImageElement = document.querySelector(
-        quizizzModule.selectors.questionImage,
+        waygroundModule.selectors.questionImage,
       );
       if (questionImageElement?.src) {
         questionImageUrl = questionImageElement.src.startsWith("/")
@@ -2710,19 +2692,19 @@ Please perform the following:
       }
 
       const questionTitleTextElement = document.querySelector(
-        quizizzModule.selectors.questionText,
+        waygroundModule.selectors.questionText,
       );
       const questionTextOuterContainer = document.querySelector(
-        quizizzModule.selectors.questionContainer,
+        waygroundModule.selectors.questionContainer,
       );
 
       // Extract options first
       const optionButtons = document.querySelectorAll(
-        quizizzModule.selectors.optionButtons,
+        waygroundModule.selectors.optionButtons,
       );
       optionButtons.forEach((button) => {
         const text = button
-          .querySelector(quizizzModule.selectors.optionText)
+          .querySelector(waygroundModule.selectors.optionText)
           ?.textContent.trim();
         if (text) optionTexts.push(text);
       });
@@ -2746,15 +2728,15 @@ Please perform the following:
 
     checkPageInfoAndReprocess: () => {
       const pageInfoElement = document.querySelector(
-        quizizzModule.selectors.pageInfo,
+        waygroundModule.selectors.pageInfo,
       );
       let currentPageInfoText = pageInfoElement
         ? pageInfoElement.textContent.trim()
         : "";
 
-      if (currentPageInfoText !== quizizzModule.lastPageInfo) {
-        quizizzModule.lastPageInfo = currentPageInfoText;
-        quizizzModule.extractAndProcess();
+      if (currentPageInfoText !== waygroundModule.lastPageInfo) {
+        waygroundModule.lastPageInfo = currentPageInfoText;
+        waygroundModule.extractAndProcess();
       }
     },
 
@@ -2815,17 +2797,17 @@ Please perform the following:
     },
 
     initialize: () => {
-      quizizzModule.lastPageInfo = "INITIAL_STATE";
+      waygroundModule.lastPageInfo = "INITIAL_STATE";
 
       if (sharedState.observer) sharedState.observer.disconnect();
 
       sharedState.observer = new MutationObserver(
-        quizizzModule.debounce(() => {
+        waygroundModule.debounce(() => {
           if (sharedState.uiModificationsEnabled) {
-            quizizzModule.checkPageInfoAndReprocess();
-            quizizzModule.enhanceStreakCounter();
-            quizizzModule.modifyTabLeaveWarning();
-            quizizzModule.modifyStartButton();
+            waygroundModule.checkPageInfoAndReprocess();
+            waygroundModule.enhanceStreakCounter();
+            waygroundModule.modifyTabLeaveWarning();
+            waygroundModule.modifyStartButton();
           }
         }, 500),
       );
@@ -2836,13 +2818,13 @@ Please perform the following:
       });
 
       if (sharedState.uiModificationsEnabled) {
-        quizizzModule.extractAndProcess();
-        quizizzModule.enhanceStreakCounter();
-        quizizzModule.modifyTabLeaveWarning();
-        quizizzModule.modifyStartButton();
+        waygroundModule.extractAndProcess();
+        waygroundModule.enhanceStreakCounter();
+        waygroundModule.modifyTabLeaveWarning();
+        waygroundModule.modifyStartButton();
         // Add delay to check for existing streak element
         // NOTE: this may not be enough on shitty connections
-        setTimeout(() => quizizzModule.enhanceStreakCounter(), 1000);
+        setTimeout(() => waygroundModule.enhanceStreakCounter(), 1000);
       }
     },
   };
@@ -3189,14 +3171,14 @@ Please perform the following:
 
   // === SHARED QUIZ DATA PROCESSOR ===
   const processQuizData = (data) => {
-    console.log("Trying to get all questions...");
+    GM_log("[*] Trying to get all questions...");
     try {
       var questionKeys = Object.keys(data.data.room.questions);
     } catch (e) {
       var questionKeys = Object.keys(data.room.questions);
     }
     for (const questionKey of questionKeys) {
-      console.log("----------------");
+      GM_log("[*] ----------------");
       try {
         var questionData = data.data.room.questions[questionKey];
       } catch (e) {
@@ -3207,20 +3189,20 @@ Please perform the following:
       // Store the complete question data in questionsPool
       sharedState.questionsPool[questionKey] = questionData;
 
-      console.log(`Question ID: ${questionKey}`);
-      console.log(`Question Type: ${questionData.type}`);
-      console.log(`Question Text: ${questionData.structure.query.text}`);
+      GM_log(`[+] Question ID: ${questionKey}`);
+      GM_log(`[+] Question Type: ${questionData.type}`);
+      GM_log(`[+] Question Text: ${questionData.structure.query.text}`);
       if (questionData.structure.query.media) {
         for (const media of questionData.structure.query.media) {
-          console.log(`Media URL: ${media.url} (Type: ${media.type})`);
+          GM_log(`[+] Media URL: ${media.url} (Type: ${media.type})`);
         }
       }
       const options = questionData.structure.options || [];
       for (const option of options) {
-        console.log(`Option: ${option.text} (${option.id})`);
+        GM_log(`[+] Option: ${option.text} (${option.id})`);
         if (option.media) {
           for (const media of option.media) {
-            console.log(`Media URL: ${media.url} (Type: ${media.type})`);
+            GM_log(`[+] Media URL: ${media.url} (Type: ${media.type})`);
           }
         }
       }
@@ -3240,7 +3222,7 @@ Please perform the following:
       (url.includes("play-api/createTestGameActivity") && (url.includes("wayground.com") || url.includes("quizizz.com")))
     ) {
       this._blocked = true;
-      GM_log("Blocked cheating detection request to createTestGameActivity");
+      GM_log("[+] Blocked cheating detection request to createTestGameActivity");
     }
 
     if (
@@ -3255,7 +3237,7 @@ Please perform the following:
             const data = JSON.parse(this.responseText);
             processQuizData(data);
           } catch (e) {
-            console.log("Failed to parse response:", e);
+            GM_log("[!] Failed to parse response:", e);
           }
         }
       });
@@ -3271,10 +3253,9 @@ Please perform the following:
         if (this.status === 200) {
           try {
             const data = JSON.parse(this.responseText);
-            console.log("ProceedGame response:", data);
             processProceedGameResponse(data);
           } catch (e) {
-            console.log("Failed to parse proceedGame response:", e);
+            GM_log("[!] Failed to parse proceedGame response:", e);
           }
         }
       });
@@ -3286,7 +3267,7 @@ Please perform the following:
   XMLHttpRequest.prototype.send = function (data) {
     // Block cheating detection requests
     if (this._blocked) {
-      GM_log("Cheating detection request blocked - not sending data");
+      GM_log("[+] Cheating detection request blocked - not sending data");
       return;
     }
 
@@ -3301,16 +3282,14 @@ Please perform the following:
       if (data) {
         try {
           let requestData = JSON.parse(data);
-          console.log("Original proceedGame request:", requestData);
 
           requestData = processProceedGameRequest(requestData);
 
           const modifiedData = JSON.stringify(requestData);
-          console.log("Modified proceedGame request:", requestData);
 
           return originalXMLHttpRequestSend.call(this, modifiedData);
         } catch (e) {
-          console.log("Failed to parse/modify proceedGame request:", e);
+          GM_log("[!] Failed to parse/modify proceedGame request:", e);
           return originalXMLHttpRequestSend.call(this, data);
         }
       }
@@ -3349,7 +3328,7 @@ Please perform the following:
       typeof url === "string" &&
       (url.includes("play-api/createTestGameActivity") && (url.includes("wayground.com") || url.includes("quizizz.com")))
     ) {
-      GM_log("Blocked cheating detection request to createTestGameActivity");
+      GM_log("[+] Blocked cheating detection request to createTestGameActivity");
       return Promise.resolve(
         new Response(JSON.stringify({}), { status: 200, statusText: "OK" }),
       );
@@ -3367,7 +3346,6 @@ Please perform the following:
     ) {
       try {
         let requestData = JSON.parse(options.body);
-        console.log("Original proceedGame fetch request:", requestData);
 
         requestData = processProceedGameRequest(requestData);
 
@@ -3375,11 +3353,10 @@ Please perform the following:
           ...options,
           body: JSON.stringify(requestData),
         };
-        console.log("Modified proceedGame fetch request:", requestData);
 
         return originalFetch.call(this, url, modifiedOptions);
       } catch (e) {
-        console.log("Failed to parse/modify proceedGame fetch request:", e);
+        GM_log("[!] Failed to parse/modify proceedGame fetch request:", e);
       }
     }
 
@@ -3438,7 +3415,6 @@ Please perform the following:
             .clone()
             .json()
             .then((data) => {
-              console.log("ProceedGame response:", data);
               processProceedGameResponse(data);
               return response;
             })
@@ -3456,22 +3432,22 @@ Please perform the following:
     const hostname = window.location.hostname;
 
     if (hostname.includes("kahoot.it")) {
-      GM_log("Initializing Kahoot module");
+      GM_log("[*] Initializing Kahoot module...");
       kahootModule.initialize();
     } else if (
       hostname.includes("quizizz.com") ||
       hostname.includes("wayground.com")
     ) {
-      GM_log("Initializing Quizizz/Wayground module");
+      GM_log("[*] Initializing Wayground module...");
       if (sharedState.config.enableSpoofFullscreen) {
         spoofFullscreenAndFocus();
       }
-      quizizzModule.initialize();
+      waygroundModule.initialize();
     } else if (
       hostname.includes("testportal.net") ||
       hostname.includes("testportal.pl")
     ) {
-      GM_log("Initializing Testportal module");
+      GM_log("[*] Initializing Testportal module...");
       if (sharedState.config.enableSpoofFullscreen) {
         spoofFullscreenAndFocus();
       }
@@ -3480,7 +3456,7 @@ Please perform the following:
       hostname.includes("docs.google.com") &&
       window.location.pathname.includes("/forms/")
     ) {
-      GM_log("Initializing Google Forms module");
+      GM_log("[*] Initializing Google Forms module...");
       googleFormsModule.initialize();
     }
   };
@@ -3499,8 +3475,8 @@ Please perform the following:
 
     createToggleButton();
     initializeDomainSpecific();
-    GM_log(`UETS loaded on ${sharedState.currentDomain}`);
-    GM_log(`Made by Nyx (with the slight help of GH Copilot)`);
+    GM_log(`[+] UETS loaded on ${sharedState.currentDomain}`);
+    GM_log(`[+] Made by Nyx (with the slight help of GH Copilot)`);
 
     // Check for first run and show welcome popup
     if (!GM_getValue(sharedState.firstRunKey, false)) {
