@@ -9,3 +9,4 @@ uets-server/ip_blacklist.json
 *.log
 __pycache__
 include
+jquery.*

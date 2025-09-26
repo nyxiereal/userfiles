@@ -1062,6 +1062,7 @@
     const button = document.createElement("button");
     button.textContent = text;
     button.classList.add(...className.split(" "));
+    button.type = "button";
     button.onclick = onClick;
     return button;
   };
@@ -1100,7 +1101,9 @@
     const copyPromptButton = createButton(
       "Prompt",
       "uets-copy-prompt-button uets-copy-prompt-button-main-question",
-      async () => {
+      async (event) => {
+        event.preventDefault(); // Prevent form submission
+        event.stopPropagation(); // Stop event bubbling
         const prompt = buildGeminiPrompt(
           questionText || "(See attached image)",
           options,
@@ -1119,12 +1122,15 @@
         }
       },
     );
+    copyPromptButton.type = "button"; // Explicitly set button type
     buttonsContainer.appendChild(copyPromptButton);
 
     const geminiButton = createButton(
       "Ask AI",
       "uets-gemini-button uets-gemini-button-main-question",
-      async () => {
+      async (event) => {
+        event.preventDefault(); // Prevent form submission
+        event.stopPropagation(); // Stop event bubbling
         let imageData = null;
         if (imageUrl && sharedState.config.includeImages) {
           try {
@@ -1143,13 +1149,16 @@
         );
       },
     );
+    geminiButton.type = "button"; // Explicitly set button type
     buttonsContainer.appendChild(geminiButton);
 
     if (includeGetAnswer) {
       const getAnswerButton = createButton(
         "Get Answer",
         "uets-get-answer-button",
-        async () => {
+        async (event) => {
+          event.preventDefault(); // Prevent form submission
+          event.stopPropagation(); // Stop event bubbling
           const questionData =
             sharedState.quizData[sharedState.currentQuestionId];
           if (questionData) {
@@ -1174,6 +1183,7 @@
           }
         },
       );
+      getAnswerButton.type = "button";
       buttonsContainer.appendChild(getAnswerButton);
     }
 
@@ -3279,6 +3289,29 @@ Please perform the following:
       return;
     }
 
+    // Intercept TestPortal requests and force wb=0
+    if (
+      this._method === "POST" &&
+      this._url &&
+      (this._url.includes("testportal.net") || this._url.includes("testportal.pl")) &&
+      this._url.includes("DoTestQuestion.html") &&
+      data &&
+      typeof data === "string"
+    ) {
+      try {
+        const urlParams = new URLSearchParams(data);
+        if (urlParams.has('wb')) {
+          const originalWb = urlParams.get('wb');
+          urlParams.set('wb', '0');
+          const modifiedData = urlParams.toString();
+          GM_log(`[+] Modified TestPortal wb parameter from ${originalWb} to 0`);
+          return originalXMLHttpRequestSend.call(this, modifiedData);
+        }
+      } catch (e) {
+        GM_log("[!] Failed to modify TestPortal request:", e);
+      }
+    }
+
     // Intercept POST requests to proceedGame and modify timeTaken
     if (
       this._method === "POST" &&
@@ -3342,6 +3375,33 @@ Please perform the following:
       );
     }
 
+    // Intercept TestPortal requests via fetch and force wb=0
+    if (
+      typeof url === "string" &&
+      (url.includes("testportal.net") || url.includes("testportal.pl")) &&
+      url.includes("DoTestQuestion.html") &&
+      options &&
+      options.method === "POST" &&
+      options.body &&
+      typeof options.body === "string"
+    ) {
+      try {
+        const urlParams = new URLSearchParams(options.body);
+        if (urlParams.has('wb')) {
+          const originalWb = urlParams.get('wb');
+          urlParams.set('wb', '0');
+          const modifiedOptions = {
+            ...options,
+            body: urlParams.toString(),
+          };
+          GM_log(`[+] Modified TestPortal wb parameter from ${originalWb} to 0`);
+          return originalFetch.call(this, url, modifiedOptions);
+        }
+      } catch (e) {
+        GM_log("[!] Failed to modify TestPortal fetch request:", e);
+      }
+    }
+
     // Intercept POST requests to proceedGame via fetch
     if (
       typeof url === "string" &&
@@ -3371,7 +3431,7 @@ Please perform the following:
     // Intercept requests to reaction-update via fetch
     if (
       typeof url === "string" &&
-      (url.includes("wayground.com") || url.includes("quizizz.com")) && 
+      (url.includes("wayground.com") || url.includes("quizizz.com")) &&
       url.includes("_gameapi/main/public/v1/games/") &&
       url.includes("/reaction-update") &&
       options &&
