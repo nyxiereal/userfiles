@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:alpine AS builder
+FROM ghcr.io/astral-sh/uv:debian AS builder
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ RUN uv venv /app/.venv && \
     uv pip install --python /app/.venv/bin/python -r requirements.txt
 
 # Final stage
-FROM ghcr.io/astral-sh/uv:alpine
+FROM ghcr.io/astral-sh/uv:debian
 
 WORKDIR /app
 
