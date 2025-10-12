@@ -27,8 +27,8 @@ basicConfig(filename="uets-server.log", level=INFO)
 logger = getLogger(__name__)
 logger.setLevel(INFO)
 
-DATA_FILE = "quiz_data.json"
-BLACKLIST_FILE = "ip_blacklist.json"
+DATA_FILE = os.getenv("DATA_FILE", "quiz_data.json")
+BLACKLIST_FILE = os.getenv("BLACKLIST_FILE", "ip_blacklist.json")
 
 # Store active connections and their game data
 active_connections = {}  # {session_id: {client_id, game_id}}

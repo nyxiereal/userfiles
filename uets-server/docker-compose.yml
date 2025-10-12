@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  uets-server:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATA_FILE=/app/data/quiz_data.json
+      - BLACKLIST_FILE=/app/data/ip_blacklist.json
+    restart: unless-stopped

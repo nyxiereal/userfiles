@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.log
+*.json
+bin/
+lib/
+lib64/
+include/
+.lock
+pyvenv.cfg
+CACHEDIR.TAG
+.git
+.gitignore
