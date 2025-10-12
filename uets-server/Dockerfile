@@ -1,15 +1,21 @@
-FROM python:3.13-slim
+FROM ghcr.io/astral-sh/uv:alpine AS builder
 
 WORKDIR /app
-
-# Install uv
-RUN pip install --no-cache-dir uv
 
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install dependencies
-RUN uv pip install --system -r requirements.txt
+# Install dependencies into a virtual environment
+RUN uv venv /app/.venv && \
+    uv pip install --python /app/.venv/bin/python -r requirements.txt
+
+# Final stage
+FROM ghcr.io/astral-sh/uv:alpine
+
+WORKDIR /app
+
+# Copy virtual environment from builder
+COPY --from=builder /app/.venv /app/.venv
 
 # Copy application code
 COPY main.py .
@@ -21,6 +27,7 @@ VOLUME ["/app/data"]
 ENV DATA_FILE=/app/data/quiz_data.json
 ENV BLACKLIST_FILE=/app/data/ip_blacklist.json
 ENV PYTHONUNBUFFERED=1
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Expose port
 EXPOSE 5000
