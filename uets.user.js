@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.3.3
+// @version      1.3.4
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -1023,6 +1023,11 @@
   }
   .kahoot-answer-button {
     position: relative;
+  }
+
+  .uets-testportal-invisible {
+    opacity: 0 !important;
+    pointer-events: auto !important;
   }
   `)
 
@@ -2119,78 +2124,129 @@ Please perform the following:
     GM_setValue(UI_MODS_ENABLED_KEY, sharedState.uiModificationsEnabled);
     updateToggleButtonAppearance();
 
+    const isTestPortal = sharedState.currentDomain.includes("testportal.net") ||
+      sharedState.currentDomain.includes("testportal.pl");
+
     if (!sharedState.uiModificationsEnabled) {
-      document
-        .querySelectorAll(
-          ".uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-get-answer-button, .uets-main-question-buttons-container, .uets-streak-bonus",
-        )
-        .forEach((el) => el.remove());
+      if (isTestPortal) {
+        // On TestPortal: just hide elements with opacity
+        document.querySelectorAll(
+          ".uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-get-answer-button, .uets-main-question-buttons-container, .uets-streak-bonus"
+        ).forEach((el) => el.classList.add("uets-testportal-invisible"));
 
-      if (sharedState.geminiPopup) {
-        sharedState.geminiPopup.remove();
-        sharedState.geminiPopup = null;
-      }
-
-      document.querySelectorAll(".uets-option-wrapper").forEach((wrapper) => {
-        const button = wrapper.querySelector("button.option");
-        if (button && wrapper.parentNode) {
-          wrapper.parentNode.insertBefore(button, wrapper);
+        if (sharedState.geminiPopup) {
+          sharedState.geminiPopup.classList.add("uets-testportal-invisible");
         }
-        wrapper.remove();
-      });
+      } else {
+        // On other sites: remove elements as before
+        document.querySelectorAll(
+          ".uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-get-answer-button, .uets-main-question-buttons-container, .uets-streak-bonus"
+        ).forEach((el) => el.remove());
+
+        if (sharedState.geminiPopup) {
+          sharedState.geminiPopup.remove();
+          sharedState.geminiPopup = null;
+        }
+
+        document.querySelectorAll(".uets-option-wrapper").forEach((wrapper) => {
+          const button = wrapper.querySelector("button.option");
+          if (button && wrapper.parentNode) {
+            wrapper.parentNode.insertBefore(button, wrapper);
+          }
+          wrapper.remove();
+        });
+
+        sharedState.elementsToCleanup.forEach((el) => {
+          if (el && el.parentNode && !el.querySelector("button.option")) {
+            el.remove();
+          }
+        });
+        sharedState.elementsToCleanup = [];
+
+        if (sharedState.currentDomain.includes("wayground.com") || sharedState.currentDomain.includes("quizizz.com")) {
+          // Revert text edits
+          if (sharedState.originalTabLeaveHTML !== null) {
+            const ruleDiv = document.querySelector('.test-mode-container');
+            if (ruleDiv) {
+              ruleDiv.innerHTML = sharedState.originalTabLeaveHTML;
+            }
+            sharedState.originalTabLeaveHTML = null;
+          }
+          if (sharedState.originalStartButtonText !== null) {
+            const startButton = document.querySelector('.start-game');
+            if (startButton) {
+              const span = startButton.querySelector('span');
+              if (span) {
+                span.textContent = sharedState.originalStartButtonText;
+              }
+            }
+            sharedState.originalStartButtonText = null;
+          }
+        }
+
+        if (sharedState.currentDomain.includes("docs.google.com")) {
+          const questionBlocks = document.querySelectorAll(
+            'div[role="listitem"] > div[jsmodel]',
+          );
+          questionBlocks.forEach((block) => {
+            delete block.dataset.uetsButtonsAdded;
+          });
+        }
+
+        if (
+          sharedState.currentDomain.includes("testportal.net") ||
+          sharedState.currentDomain.includes("testportal.pl")
+        ) {
+          const questionElements = document.querySelectorAll(".question_essence");
+          questionElements.forEach((el) => {
+            delete el.dataset.enhancementsAdded;
+          });
+        }
+      }
+    } else {
+      if (isTestPortal) {
+        // On TestPortal: show elements by removing opacity class
+        document.querySelectorAll(
+          ".uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-get-answer-button, .uets-main-question-buttons-container, .uets-streak-bonus"
+        ).forEach((el) => el.classList.remove("uets-testportal-invisible"));
+
+        if (sharedState.geminiPopup) {
+          sharedState.geminiPopup.classList.remove("uets-testportal-invisible");
+        }
+      } else {
+        setTimeout(() => {
+          initializeDomainSpecific();
+        }, 100);
+      }
+    }
+  };
+
+  // Add cleanup on navigation (beforeunload event):
+  window.addEventListener("beforeunload", () => {
+    const isTestPortal = sharedState.currentDomain.includes("testportal.net") ||
+      sharedState.currentDomain.includes("testportal.pl");
+
+    if (isTestPortal) {
+      // Remove all UETS elements before navigating away from TestPortal
+      document.querySelectorAll(
+        ".uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-get-answer-button, .uets-main-question-buttons-container, .uets-streak-bonus, .uets-response-popup, .uets-welcome-popup, .uets-config-gui"
+      ).forEach((el) => el.remove());
 
       sharedState.elementsToCleanup.forEach((el) => {
-        if (el && el.parentNode && !el.querySelector("button.option")) {
+        if (el && el.parentNode) {
           el.remove();
         }
       });
-      sharedState.elementsToCleanup = [];
 
-      if (sharedState.currentDomain.includes("wayground.com") || sharedState.currentDomain.includes("quizizz.com")) {
-        // Revert text edits
-        if (sharedState.originalTabLeaveHTML !== null) {
-          const ruleDiv = document.querySelector('.test-mode-container');
-          if (ruleDiv) {
-            ruleDiv.innerHTML = sharedState.originalTabLeaveHTML;
-          }
-          sharedState.originalTabLeaveHTML = null;
-        }
-        if (sharedState.originalStartButtonText !== null) {
-          const startButton = document.querySelector('.start-game');
-          if (startButton) {
-            const span = startButton.querySelector('span');
-            if (span) {
-              span.textContent = sharedState.originalStartButtonText;
-            }
-          }
-          sharedState.originalStartButtonText = null;
-        }
-      };
-
-      if (sharedState.currentDomain.includes("docs.google.com")) {
-        const questionBlocks = document.querySelectorAll(
-          'div[role="listitem"] > div[jsmodel]',
-        );
-        questionBlocks.forEach((block) => {
-          delete block.dataset.uetsButtonsAdded;
-        });
+      // Remove toggle button on TestPortal before navigation
+      if (sharedState.toggleButton) {
+        sharedState.toggleButton.remove();
       }
 
-      if (
-        sharedState.currentDomain.includes("testportal.net") ||
-        sharedState.currentDomain.includes("testportal.pl")
-      ) {
-        const questionElements = document.querySelectorAll(".question_essence");
-        questionElements.forEach((el) => {
-          delete el.dataset.enhancementsAdded;
-        });
-      }
-    } else {
-      setTimeout(() => {
-        initializeDomainSpecific();
-      }, 100);
+      // Restore original RegExp.prototype.test
+      RegExp.prototype.test = sharedState.originalRegExpTest;
     }
-  };
+  });
 
   const createToggleButton = () => {
     if (document.getElementById("uets-toggle-ui-button")) return;
