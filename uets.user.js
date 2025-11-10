@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.3.4
+// @version      1.4.0
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -41,8 +41,7 @@
     enableSpoofFullscreen: true,
     serverUrl: "https://uets.meowery.eu",
     geminiApiKey: "",
-    geminiModel: "gemini-2.5-flash",
-    thinkingBudget: 256,
+    thinkingBudget: 512,
     maxOutputTokens: 1024,
     temperature: 0.2,
     topP: 0.95,
@@ -1574,13 +1573,6 @@
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="The Gemini model to use for AI queries. I recommend using the flash or lite series of models for quick answers. Breakdown (Requests/min / Tokens/min):\n\n2.5 Pro - Slower responses, costs more tokens, best quality. 5/250k.\n2.5 Flash - Fast responses, lower ratelimit, good quality. 10/250k.\n2.5 Flash-Lite - Fastest responses, lowest ratelimit, okay quality. 15/250k.\n2.0 Flash - Fast responses, lower ratelimit, acceptable quality. 15/1M.\n2.0 Flash-Lite - Fastest responses, lowest ratelimit, acceptable quality. 30/1M." title="Info"></button>
-            <label class="uets-config-label">Model</label>
-          </div>
-          <select class="uets-config-input" id="geminiModel"><option>Loading models...</option></select>
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
             <button class="uets-config-info" data-info="Whether to include question images in AI prompts." title="Info"></button>
             <label class="uets-config-label">Include images</label>
           </div>
@@ -1594,7 +1586,7 @@
             <button class="uets-config-info" data-info="Budget for thinking in the AI model (0 disables thinking). Can increase output response quality, but increases the waiting time for the answer. I recommend 256 or 512 tokens." title="Info"></button>
             <label class="uets-config-label">Thinking budget</label>
           </div>
-          <input type="number" class="uets-config-input" id="thinkingBudget" min="0" max="4096">
+          <input type="number" class="uets-config-input" id="thinkingBudget" min="512" max="4096">
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
@@ -1675,7 +1667,6 @@
       sharedState.config.enableSpoofFullscreen = document.getElementById('enableSpoofFullscreen').checked;
       sharedState.config.serverUrl = document.getElementById('serverUrl').value;
       sharedState.config.geminiApiKey = document.getElementById('geminiApiKey').value;
-      sharedState.config.geminiModel = document.getElementById('geminiModel').value;
       sharedState.config.includeImages = document.getElementById('includeImages').checked;
       sharedState.config.thinkingBudget = parseInt(document.getElementById('thinkingBudget').value);
       sharedState.config.maxOutputTokens = parseInt(document.getElementById('maxOutputTokens').value);
@@ -1695,14 +1686,6 @@
       if (confirm('Reset all settings to defaults?')) {
         resetConfig();
         populateValues();
-        // Re-fetch models after reset
-        fetchGeminiModels().then(models => {
-          const select = document.getElementById('geminiModel');
-          if (select) {
-            select.innerHTML = models.map(m => `<option value="${m.name.replace('models/', '')}">${m.displayName}</option>`).join('');
-            select.value = sharedState.config.geminiModel;
-          }
-        });
       }
     };
 
@@ -1730,20 +1713,6 @@
     document.body.appendChild(gui);
     sharedState.configGui = gui;
     populateValues();
-
-    // Fetch and populate models
-    fetchGeminiModels().then(models => {
-      const select = document.getElementById('geminiModel');
-      if (select) {
-        select.innerHTML = models.map(m => `<option value="${m.name.replace('models/', '')}">${m.displayName}</option>`).join('');
-        select.value = sharedState.config.geminiModel;
-      }
-    }).catch(() => {
-      const select = document.getElementById('geminiModel');
-      if (select) {
-        select.innerHTML = '<option value="">Failed to load models</option>';
-      }
-    });
 
     // Add event listeners for info buttons
     const infoButtons = gui.querySelectorAll('.uets-config-info');
@@ -1789,62 +1758,6 @@
       }
     }
     return apiKey.trim();
-  };
-
-
-  // === SHARED MODEL FETCHING ===
-  const fetchGeminiModels = async () => {
-    const apiKey = sharedState.config.geminiApiKey;
-    if (!apiKey || apiKey.trim() === "") return [];
-
-    let models = [];
-    let pageToken = '';
-
-    do {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}${pageToken ? '&pageToken=' + pageToken : ''}`;
-      try {
-        const response = await new Promise((resolve, reject) => {
-          GM_xmlhttpRequest({
-            method: "GET",
-            url: url,
-            onload: (res) => {
-              if (res.status === 200) {
-                resolve(JSON.parse(res.responseText));
-              } else {
-                reject(new Error(`HTTP ${res.status}: ${res.responseText}`));
-              }
-            },
-            onerror: (err) => reject(err),
-          });
-        });
-
-        const filteredModels = response.models.filter(
-          (m) =>
-            m.supportedGenerationMethods.includes("generateContent") &&
-            m.supportedGenerationMethods.includes("countTokens") &&
-            m.name.includes('gemini') &&
-            m.name.includes('2.') &&
-            !m.name.toLowerCase().includes('tts') &&
-            !m.name.toLowerCase().includes('live')
-        );
-        models.push(...filteredModels);
-        pageToken = response.nextPageToken;
-      } catch (error) {
-        GM_log("[!] Error fetching Gemini models:", error);
-        break;
-      }
-    } while (pageToken);
-
-    // Sort: models without 'preview' or 'experimental' first, then with 'preview' or 'experimental'
-    models.sort((a, b) => {
-      const aHasPreviewOrExperimental = a.name.toLowerCase().includes('preview') || a.name.toLowerCase().includes('experimental');
-      const bHasPreviewOrExperimental = b.name.toLowerCase().includes('preview') || b.name.toLowerCase().includes('experimental');
-      if (aHasPreviewOrExperimental && !bHasPreviewOrExperimental) return 1;
-      if (!aHasPreviewOrExperimental && bHasPreviewOrExperimental) return -1;
-      return 0;
-    });
-
-    return models;
   };
 
   // === SHARED IMAGE FETCHING ===
@@ -1921,7 +1834,7 @@ Please perform the following:
       !!imageData,
       platform,
     );
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${sharedState.config.geminiModel}:generateContent?key=${apiKey}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${apiKey}`;
 
     const requestPayloadContents = [{ parts: [{ text: promptText }] }];
     if (sharedState.config.includeImages && imageData && imageData.base64Data && imageData.mimeType) {
@@ -3249,15 +3162,32 @@ Please perform the following:
     try {
       var questionKeys = Object.keys(data.data.room.questions);
     } catch (e) {
-      var questionKeys = Object.keys(data.room.questions);
+      try {
+        var questionKeys = Object.keys(data.room.questions);
+      } catch (e) {
+        try {
+          var questionKeys = Object.keys(data.quiz.info.questions);
+        } catch (e) {
+          var questionKeys = Object.keys(data.data.quiz.info.questions);
+        }
+      }
     }
     for (const questionKey of questionKeys) {
       GM_log("[*] ----------------");
       try {
         var questionData = data.data.room.questions[questionKey];
       } catch (e) {
-        var questionData = data.room.questions[questionKey];
+        try {
+          var questionData = data.room.questions[questionKey];
+        } catch (e) {
+          try {
+            var questionData = data.quiz.info.questions[questionKey];
+          } catch (e) {
+            var questionData = data.data.quiz.info.questions[questionKey];
+          }
+        }
       }
+      console.log(questionData);
       sharedState.quizData[questionKey] = questionData;
 
       // Store the complete question data in questionsPool
@@ -3278,6 +3208,20 @@ Please perform the following:
           for (const media of option.media) {
             GM_log(`[+] Media URL: ${media.url} (Type: ${media.type})`);
           }
+        }
+      }
+
+      // Auto-display correct answer if available
+      if (sharedState.uiModificationsEnabled && questionData.structure.settings?.hasCorrectAnswer && questionData.structure.answer !== undefined) {
+        const correctAnswerIndex = questionData.structure.answer;
+        GM_log(`[+] Correct Answer Index: ${correctAnswerIndex}`);
+
+        // For MCQ/MSQ type questions with options
+        if ((questionData.type === "MCQ" || questionData.type === "MSQ") && options.length > 0) {
+          const correctAnswers = Array.isArray(correctAnswerIndex) ? correctAnswerIndex : [correctAnswerIndex];
+          setTimeout(() => {
+            highlightCorrectAnswers(correctAnswers, questionData.type);
+          }, 500);
         }
       }
     }
@@ -3301,8 +3245,8 @@ Please perform the following:
 
     if (
       typeof url === "string" &&
-      (url.includes("play-api") &&
-        (url.includes("soloJoin") || url.includes("rejoinGame") || url.includes("join")) &&
+      (((url.includes("play-api") &&
+        (url.includes("soloJoin") || url.includes("rejoinGame") || url.includes("join"))) || (url.includes("_quizserver/main/v2/quiz"))) &&
         (url.includes("wayground.com") || url.includes("quizizz.com")))
     ) {
       this.addEventListener("load", function () {
@@ -3508,8 +3452,8 @@ Please perform the following:
 
     if (
       typeof url === "string" &&
-      (url.includes("play-api") &&
-        (url.includes("soloJoin") || url.includes("rejoinGame") || url.includes("join")) &&
+      (((url.includes("play-api") &&
+        (url.includes("soloJoin") || url.includes("rejoinGame") || url.includes("join"))) || (url.includes("_quizserver/main/v2/quiz"))) &&
         (url.includes("wayground.com") || url.includes("quizizz.com")))
     ) {
       return originalFetch.call(this, url, options).then((response) => {
@@ -3595,6 +3539,18 @@ Please perform the following:
     // Sync API key from old storage if config doesn't have it
     if (!sharedState.config.geminiApiKey) {
       sharedState.config.geminiApiKey = GM_getValue(GEMINI_API_KEY_STORAGE, "");
+    }
+
+    // Force thinking budget to minimum of 512 tokens
+    if (sharedState.config.thinkingBudget < 512) {
+      sharedState.config.thinkingBudget = 512;
+      GM_log("[+] Thinking budget was below 512 tokens, forced to 512");
+    }
+
+    // Force update the old server url
+    if (sharedState.config.serverUrl === "https://uets.fuckingbitch.eu") {
+      sharedState.config.serverUrl = "https://uets.meowery.eu";
+      GM_log("[+] Server URL was updated from old to new");
     }
 
     createToggleButton();

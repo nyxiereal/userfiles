@@ -2,10 +2,10 @@ from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from logging import basicConfig, getLogger, INFO
 from flask_cors import CORS
-import json
 import os
-from datetime import datetime
+import sqlite3
 from collections import defaultdict
+import threading
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "your-secret-key"
@@ -27,36 +27,79 @@ basicConfig(filename="uets-server.log", level=INFO)
 logger = getLogger(__name__)
 logger.setLevel(INFO)
 
-DATA_FILE = os.getenv("DATA_FILE", "quiz_data.json")
-BLACKLIST_FILE = os.getenv("BLACKLIST_FILE", "ip_blacklist.json")
+DATABASE_PATH = os.getenv("DATABASE_PATH", "quiz_data.db")
 
 # Store active connections and their game data
 active_connections = {}  # {session_id: {client_id, game_id}}
 game_rooms = defaultdict(dict)  # {game_id: {question_index: {choice: count}}}
 
 
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+# Database initialization
+def init_database():
+    """Initialize the SQLite database with required tables"""
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS questions (
+            question_id TEXT PRIMARY KEY,
+            question_type TEXT,
+            correct_answers TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    conn.commit()
+    conn.close()
 
 
-def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+def get_db_connection():
+    """Get a database connection"""
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
-def load_blacklist():
-    if os.path.exists(BLACKLIST_FILE):
-        with open(BLACKLIST_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+def get_question(question_id):
+    """Get question data from database"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM questions WHERE question_id = ?", (question_id,))
+    result = cursor.fetchone()
+    conn.close()
+
+    return dict(result) if result else None
 
 
-def save_blacklist(blacklist):
-    with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
-        json.dump(blacklist, f, indent=2, ensure_ascii=False)
+def save_question(question_id, question_type, correct_answers=None):
+    """Save or update question in database"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    if correct_answers is not None:
+        # Update existing question with correct answers
+        cursor.execute(
+            """
+            UPDATE questions 
+            SET correct_answers = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE question_id = ?
+        """,
+            (str(correct_answers), question_id),
+        )
+    else:
+        # Insert new question or ignore if exists
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO questions (question_id, question_type)
+            VALUES (?, ?)
+        """,
+            (question_id, question_type),
+        )
+
+    conn.commit()
+    conn.close()
 
 
 @socketio.on("connect")
@@ -161,48 +204,48 @@ def handle_reset_question(data):
         socketio.emit("question_reset", {"questionIndex": question_index}, room=game_id)
 
 
-# Keep existing HTTP endpoints
 @app.route("/api/question", methods=["POST"])
 def handle_question():
-    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
     data = request.get_json()
     question_id = data.get("questionId")
     question_type = data.get("questionType")
-    answer_ids = data.get("answerIds", [])
+
     logger.info(f"Received question data for qid {question_id}")
 
     if not question_id:
         return jsonify({"error": "Question ID required"}), 400
 
-    quiz_data = load_data()
+    # Get or create question
+    question_data = get_question(question_id)
 
-    if question_id not in quiz_data:
-        quiz_data[question_id] = {
-            "questionType": question_type,
-            "answerIds": answer_ids,
-            "correctAnswers": None,
-            "created": datetime.now().isoformat(),
-            "ips": [],
+    if not question_data:
+        # Create new question
+        save_question(question_id, question_type)
+        question_data = {
+            "question_id": question_id,
+            "question_type": question_type,
+            "correct_answers": None,
         }
-    if "ips" not in quiz_data[question_id]:
-        quiz_data[question_id]["ips"] = []
-    if client_ip not in quiz_data[question_id]["ips"]:
-        quiz_data[question_id]["ips"].append(client_ip)
-    save_data(quiz_data)
 
-    question_data = quiz_data[question_id]
+    # Parse correct_answers from string if it exists
+    correct_answers = None
+    if question_data.get("correct_answers"):
+        try:
+            correct_answers = eval(question_data["correct_answers"])
+        except:
+            correct_answers = question_data["correct_answers"]
+
     return jsonify(
         {
-            "hasAnswer": question_data.get("correctAnswers") is not None,
-            "correctAnswers": question_data.get("correctAnswers"),
-            "questionType": question_data.get("questionType"),
+            "hasAnswer": correct_answers is not None,
+            "correctAnswers": correct_answers,
+            "questionType": question_data.get("question_type"),
         }
     )
 
 
 @app.route("/api/answer", methods=["POST"])
 def submit_answer():
-    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
     data = request.get_json()
     question_id = data.get("questionId")
     correct_answers = data.get("correctAnswers")
@@ -210,35 +253,35 @@ def submit_answer():
     if not question_id or correct_answers is None:
         return jsonify({"error": "Question ID and correct answers required"}), 400
 
-    quiz_data = load_data()
-    blacklist = load_blacklist()
+    question_data = get_question(question_id)
 
-    if question_id in quiz_data:
-        if "ips" not in quiz_data[question_id]:
-            quiz_data[question_id]["ips"] = []
-        existing_answers = quiz_data[question_id].get("correctAnswers")
-        if existing_answers is not None:
-            if client_ip not in blacklist:
-                blacklist.append(client_ip)
-                save_blacklist(blacklist)
-            return jsonify({"error": "Answer already set"}), 403
-        quiz_data[question_id]["correctAnswers"] = correct_answers
-        quiz_data[question_id]["updated"] = datetime.now().isoformat()
-        if client_ip not in quiz_data[question_id]["ips"]:
-            quiz_data[question_id]["ips"].append(client_ip)
-        save_data(quiz_data)
-        return jsonify({"success": True})
+    if not question_data:
+        return jsonify({"error": "Question not found"}), 404
 
-    return jsonify({"error": "Question not found"}), 404
+    # Check if answer already exists
+    if question_data.get("correct_answers"):
+        return jsonify({"error": "Answer already set"}), 403
+
+    # Save the correct answer
+    save_question(question_id, question_data["question_type"], correct_answers)
+
+    return jsonify({"success": True})
 
 
 @app.route("/api/stats", methods=["GET"])
 def get_stats():
-    quiz_data = load_data()
-    total_questions = len(quiz_data)
-    answered_questions = sum(
-        1 for q in quiz_data.values() if q.get("correctAnswers") is not None
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) as total FROM questions")
+    total_questions = cursor.fetchone()["total"]
+
+    cursor.execute(
+        "SELECT COUNT(*) as answered FROM questions WHERE correct_answers IS NOT NULL"
     )
+    answered_questions = cursor.fetchone()["answered"]
+
+    conn.close()
 
     return jsonify(
         {
@@ -249,5 +292,24 @@ def get_stats():
     )
 
 
+@app.route("/shutdown", methods=["POST"])
+def shutdown():
+    """Shutdown endpoint for graceful server termination"""
+    logger.info("Shutdown request received")
+    print("🔴 Shutdown request received")
+
+    def shutdown_server():
+        # Give a moment for the response to be sent
+        threading.Timer(1.0, lambda: os._exit(0)).start()
+
+    shutdown_server()
+    return jsonify({"message": "Server shutting down..."}), 200
+
+
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+    # Initialize database on startup
+    init_database()
+    logger.info("Database initialized")
+    print("💾 Database initialized")
+
+    socketio.run(app, host="0.0.0.0", port=5001, debug=True)
