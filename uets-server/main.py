@@ -306,10 +306,9 @@ def shutdown():
     return jsonify({"message": "Server shutting down..."}), 200
 
 
+# Initialize database on startup
+init_database()
+logger.info("Database initialized")
+print("💾 Database initialized")
 if __name__ == "__main__":
-    # Initialize database on startup
-    init_database()
-    logger.info("Database initialized")
-    print("💾 Database initialized")
-
     socketio.run(app, host="0.0.0.0", port=5001, debug=True)
