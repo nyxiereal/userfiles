@@ -2,11 +2,11 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ master ]
     paths:
       - 'uets-server/**'
   pull_request:
-    branches: [ main, master ]
+    branches: [ master ]
     paths:
       - 'uets-server/**'
   workflow_dispatch:
