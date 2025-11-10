@@ -113,7 +113,8 @@
     kahootGameId: null,
     kahootCurrentQuestion: null,
     kahootAnswerCounts: {},
-    kahootHasConnected: false
+    kahootHasConnected: false,
+    detectedAnswers: {}
   };
 
   // === SHARED STYLES ===
@@ -402,21 +403,103 @@
 
   .uets-response-popup {
     position: fixed;
-    top: 20%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    top: 20px;
+    right: 20px;
     background: var(--md-surface-container-high);
     color: var(--md-on-surface);
-    border-radius: 28px;
-    padding: 0;
+    border-radius: 12px;
+    padding: 16px 20px;
     z-index: 10004;
-    min-width: 320px;
-    max-width: 90vh;
-    max-height: 80vh;
-    overflow: hidden;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.35), 0 6px 10px rgba(0,0,0,0.25);
+    max-width: 400px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 14px;
+    line-height: 20px;
+    animation: slideInRight 0.3s ease-out;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  @keyframes slideInRight {
+    from {
+      transform: translateX(400px);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideOutRight {
+    from {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateX(400px);
+      opacity: 0;
+    }
+  }
+
+  .uets-response-popup.uets-toast-dismiss {
+    animation: slideOutRight 0.3s ease-in forwards;
+  }
+
+  .uets-response-popup-header {
+    display: none;
+  }
+
+  .uets-response-popup-content {
+    white-space: normal;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--md-on-surface);
+    padding: 0;
+    max-height: none;
+    overflow: visible;
+    flex: 1;
+  }
+
+  .uets-response-popup-close {
+    background: none;
+    border: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 12px;
+    cursor: pointer;
+    color: var(--md-on-surface-variant);
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Material Icons Outlined';
+    font-size: 20px;
+    padding: 0;
+    flex-shrink: 0;
+  }
+
+  .uets-response-popup-close::before {
+    content: 'close';
+  }
+
+  .uets-response-popup-close:hover {
+    background: rgba(103, 80, 164, 0.08);
+    color: var(--md-primary);
+  }
+
+  .uets-response-popup-loading {
+    text-align: center;
+    font-style: normal;
+    color: var(--md-on-surface-variant);
+    padding: 0;
+    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
   }
 
   .uets-welcome-popup {
@@ -1196,6 +1279,7 @@
 
   const processProceedGameRequest = (data) => {
     if (data.response && data.response.timeTaken !== undefined && sharedState.config.enableTimeTakenEdit) {
+      const oldtimetaken = data.response.timeTaken;
       const timetakenforce =
         Math.floor(Math.random() * (sharedState.config.timeTakenMax - sharedState.config.timeTakenMin + 1)) + sharedState.config.timeTakenMin;
       data.response.timeTaken = timetakenforce;
@@ -1206,7 +1290,7 @@
         data.response.provisional.scores.correct = sharedState.config.timerBonusPoints + data.response.provisional.scoreBreakups.correct.base + data.response.provisional.scoreBreakups.correct.streak;
       }
       GM_log(
-        `[+] timeTaken modified from ${data.response.timeTaken} to ${timetakenforce}`,
+        `[+] timeTaken modified from ${oldtimetaken} to ${timetakenforce}`,
       );
     }
     return data;
@@ -1949,48 +2033,56 @@ Please perform the following:
     }
 
     let popup = document.getElementById("uets-gemini-popup");
+    let dismissTimeout;
+
+    const removePopup = () => {
+      if (dismissTimeout) clearTimeout(dismissTimeout);
+      if (popup) {
+        popup.classList.add("uets-toast-dismiss");
+        setTimeout(() => {
+          if (popup && popup.parentNode) {
+            popup.remove();
+          }
+          sharedState.geminiPopup = null;
+        }, 300);
+      }
+    };
+
     if (!popup) {
       popup = document.createElement("div");
       popup.id = "uets-gemini-popup";
       popup.classList.add("uets-response-popup");
 
-      const header = document.createElement("div");
-      header.classList.add("uets-response-popup-header");
-
-      const titleElement = document.createElement("span");
-      titleElement.classList.add("uets-response-popup-title");
-      titleElement.textContent = title;
-
-      const closeButton = document.createElement("button");
-      closeButton.classList.add("uets-response-popup-close");
-      closeButton.onclick = () => {
-        popup.remove();
-        sharedState.geminiPopup = null;
-      };
-
-      header.appendChild(titleElement);
-      header.appendChild(closeButton);
-      popup.appendChild(header);
-
       const contentDiv = document.createElement("div");
       contentDiv.classList.add("uets-response-popup-content");
       popup.appendChild(contentDiv);
 
+      const closeButton = document.createElement("button");
+      closeButton.classList.add("uets-response-popup-close");
+      closeButton.onclick = (e) => {
+        e.stopPropagation();
+        removePopup();
+      };
+      popup.appendChild(closeButton);
+
+      // Click anywhere on toast to dismiss
+      popup.onclick = removePopup;
+
       document.body.appendChild(popup);
       sharedState.geminiPopup = popup;
     } else {
-      const titleElement = popup.querySelector(".uets-response-popup-title");
-      if (titleElement) titleElement.textContent = title;
+      // Clear existing timeout if updating existing popup
+      if (dismissTimeout) clearTimeout(dismissTimeout);
     }
 
     const contentDiv = popup.querySelector(".uets-response-popup-content");
     if (isLoading) {
       contentDiv.innerHTML = `
-        <div class="uets-response-popup-loading">
-          <div class="uets-loading-spinner"></div>
-          ${content}
-        </div>
-      `;
+      <div class="uets-response-popup-loading">
+        <div class="uets-loading-spinner"></div>
+        ${content}
+      </div>
+    `;
     } else {
       let formattedContent = content.replace(
         /^(Correct Answer\(s\):)/gim,
@@ -2002,7 +2094,15 @@ Please perform the following:
       );
       contentDiv.innerHTML = formattedContent;
     }
-    popup.style.display = "block";
+
+    popup.style.display = "flex";
+
+    // Auto-dismiss after 5 seconds (only if not loading)
+    if (!isLoading) {
+      dismissTimeout = setTimeout(() => {
+        removePopup();
+      }, 7500);
+    }
   };
 
   // === SHARED UI TOGGLE ===
@@ -2195,6 +2295,58 @@ Please perform the following:
 
     document.body.appendChild(sharedState.toggleButton);
   };
+
+  // === CHECK AND DISPLAY DETECTED ANSWERS ===
+  const checkAndDisplayDetectedAnswer = () => {
+    if (!sharedState.uiModificationsEnabled) return;
+
+    const currentQuestionId = sharedState.currentQuestionId;
+    if (!currentQuestionId) return;
+
+    const detectedAnswer = sharedState.detectedAnswers[currentQuestionId];
+    if (!detectedAnswer || !detectedAnswer.formattedAnswer) return;
+
+    GM_log(`[*] Displaying detected answer for question: ${currentQuestionId}`);
+
+    // Format the answer text for display
+    let displayText = "";
+    const answer = detectedAnswer.formattedAnswer;
+
+    switch (answer.type) {
+      case 'single_choice':
+        displayText = `${answer.text}`;
+        // Also highlight the correct option if UI modifications are enabled
+        setTimeout(() => {
+          highlightCorrectAnswers([answer.index], detectedAnswer.questionType);
+        }, 500);
+        break;
+
+      case 'multiple_choice':
+        displayText = `${answer.texts.join('\n')}`;
+        // Also highlight the correct options if UI modifications are enabled
+        setTimeout(() => {
+          highlightCorrectAnswers(answer.indices, detectedAnswer.questionType);
+        }, 500);
+        break;
+
+      case 'text':
+        displayText = `${answer.text}`;
+        break;
+
+      case 'generic':
+        displayText = `${answer.text}`;
+        break;
+
+      default:
+        displayText = `${detectedAnswer.rawAnswer}`;
+    }
+
+    // Show the answer popup
+    setTimeout(() => {
+      showResponsePopup(displayText, false, "Detected Answer");
+    }, 200);
+  };
+
 
   // === DOMAIN-SPECIFIC MODULES ===
 
@@ -2644,23 +2796,53 @@ Please perform the following:
 
       const currentQuestionId = waygroundModule.getCurrentQuestionId();
       if (currentQuestionId !== sharedState.currentQuestionId) {
+        const previousQuestionId = sharedState.currentQuestionId;
         sharedState.currentQuestionId = currentQuestionId;
 
-        if (currentQuestionId && sharedState.quizData[currentQuestionId]) {
-          const questionData = sharedState.quizData[currentQuestionId];
-          const response = await sendQuestionToServer(
-            currentQuestionId,
-            questionData.type,
-            questionData.structure.options
-              ? questionData.structure.options.map((opt) => opt.id)
-              : [],
-          );
+        GM_log(`[*] Question changed from ${previousQuestionId} to ${currentQuestionId}`);
 
-          if (response && response.hasAnswer) {
-            highlightCorrectAnswers(
-              response.correctAnswers,
-              response.questionType,
+        // Check for detected answer first when question changes
+        if (currentQuestionId && sharedState.detectedAnswers[currentQuestionId]) {
+          GM_log(`[*] Found locally detected answer for question: ${currentQuestionId}`);
+          checkAndDisplayDetectedAnswer();
+        } else {
+          // Try to find answer by matching question text if direct ID lookup fails
+          let matchedAnswerInfo = null;
+          if (currentQuestionId && sharedState.quizData[currentQuestionId]) {
+            const currentQuestionData = sharedState.quizData[currentQuestionId];
+            const currentQuestionText = currentQuestionData.structure.query.text;
+
+            // Search through detected answers for matching question text
+            for (const [storedKey, answerInfo] of Object.entries(sharedState.detectedAnswers)) {
+              if (answerInfo.questionText === currentQuestionText) {
+                matchedAnswerInfo = answerInfo;
+                GM_log(`[*] Found answer by text matching: ${storedKey} -> ${currentQuestionId}`);
+                // Store under the current question ID for future reference
+                sharedState.detectedAnswers[currentQuestionId] = answerInfo;
+                break;
+              }
+            }
+          }
+
+          if (matchedAnswerInfo) {
+            checkAndDisplayDetectedAnswer();
+          } else if (currentQuestionId && sharedState.quizData[currentQuestionId]) {
+            // Fallback to server request if no local answer detected
+            const questionData = sharedState.quizData[currentQuestionId];
+            const response = await sendQuestionToServer(
+              currentQuestionId,
+              questionData.type,
+              questionData.structure.options
+                ? questionData.structure.options.map((opt) => opt.id)
+                : [],
             );
+
+            if (response && response.hasAnswer) {
+              highlightCorrectAnswers(
+                response.correctAnswers,
+                response.questionType,
+              );
+            }
           }
         }
       }
@@ -3156,7 +3338,7 @@ Please perform the following:
     },
   };
 
-  // === SHARED QUIZ DATA PROCESSOR ===
+
   const processQuizData = (data) => {
     GM_log("[*] Trying to get all questions...");
     try {
@@ -3172,6 +3354,7 @@ Please perform the following:
         }
       }
     }
+
     for (const questionKey of questionKeys) {
       GM_log("[*] ----------------");
       try {
@@ -3211,20 +3394,80 @@ Please perform the following:
         }
       }
 
-      // Auto-display correct answer if available
-      if (sharedState.uiModificationsEnabled && questionData.structure.settings?.hasCorrectAnswer && questionData.structure.answer !== undefined) {
-        const correctAnswerIndex = questionData.structure.answer;
-        GM_log(`[+] Correct Answer Index: ${correctAnswerIndex}`);
+      // Enhanced answer detection and storage
+      if (questionData.structure && questionData.structure.answer !== undefined) {
+        const correctAnswerData = questionData.structure.answer;
+        const hasCorrectAnswer = questionData.structure.settings?.hasCorrectAnswer || (correctAnswerData !== null && correctAnswerData !== undefined);
 
-        // For MCQ/MSQ type questions with options
-        if ((questionData.type === "MCQ" || questionData.type === "MSQ") && options.length > 0) {
-          const correctAnswers = Array.isArray(correctAnswerIndex) ? correctAnswerIndex : [correctAnswerIndex];
-          setTimeout(() => {
-            highlightCorrectAnswers(correctAnswers, questionData.type);
-          }, 500);
+        if (hasCorrectAnswer) {
+          GM_log(`[+] Correct Answer Data: ${JSON.stringify(correctAnswerData)}`);
+
+          // Store the detected answer in our local temp list
+          const answerInfo = {
+            questionId: questionKey,
+            questionType: questionData.type,
+            questionText: questionData.structure.query.text,
+            rawAnswer: correctAnswerData,
+            options: options,
+            detectedAt: Date.now(),
+            formattedAnswer: null
+          };
+
+          // Format the answer based on question type
+          if (questionData.type === "MCQ" && options.length > 0) {
+            const correctIndex = correctAnswerData;
+            if (typeof correctIndex === 'number' && correctIndex >= 0 && correctIndex < options.length) {
+              answerInfo.formattedAnswer = {
+                type: 'single_choice',
+                index: correctIndex,
+                text: options[correctIndex].text.replace(/<[^>]*>/g, '').trim()
+              };
+              GM_log(`[+] MCQ Correct Answer: ${answerInfo.formattedAnswer.text} (index: ${correctIndex})`);
+            }
+          } else if (questionData.type === "MSQ" && options.length > 0) {
+            let correctIndices = Array.isArray(correctAnswerData) ? correctAnswerData : [correctAnswerData];
+            correctIndices = correctIndices.filter(idx =>
+              typeof idx === 'number' && idx >= 0 && idx < options.length
+            );
+
+            if (correctIndices.length > 0) {
+              const correctTexts = correctIndices.map(idx => options[idx].text.replace(/<[^>]*>/g, '').trim());
+              answerInfo.formattedAnswer = {
+                type: 'multiple_choice',
+                indices: correctIndices,
+                texts: correctTexts
+              };
+              GM_log(`[+] MSQ Correct Answers: ${correctTexts.join(', ')} (indices: ${correctIndices.join(', ')})`);
+            }
+          } else if (questionData.type === "BLANK" || questionData.type === "FIB") {
+            answerInfo.formattedAnswer = {
+              type: 'text',
+              text: correctAnswerData
+            };
+            GM_log(`[+] BLANK/FIB Correct Answer: ${correctAnswerData}`);
+          } else {
+            answerInfo.formattedAnswer = {
+              type: 'generic',
+              text: correctAnswerData
+            };
+            GM_log(`[+] Generic Correct Answer: ${correctAnswerData}`);
+          }
+
+          // Store in our local detected answers list with BOTH the current key AND the _id if it exists
+          sharedState.detectedAnswers[questionKey] = answerInfo;
+
+          // Also store with the _id as key if it exists and is different
+          if (questionData._id && questionData._id !== questionKey) {
+            sharedState.detectedAnswers[questionData._id] = answerInfo;
+            GM_log(`[+] Answer also stored with _id key: ${questionData._id}`);
+          }
+
+          GM_log(`[+] Answer stored locally for question: ${questionKey}`);
         }
       }
     }
+
+    GM_log(`[+] Processed ${questionKeys.length} questions, ${Object.keys(sharedState.detectedAnswers).length} total answer mappings stored`);
   };
 
   // === REQUEST INTERCEPTION ===
