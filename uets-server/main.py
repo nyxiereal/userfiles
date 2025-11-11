@@ -27,7 +27,7 @@ basicConfig(filename="uets-server.log", level=INFO)
 logger = getLogger(__name__)
 logger.setLevel(INFO)
 
-DATABASE_PATH = os.getenv("DATABASE_PATH", "quiz_data.db")
+DATABASE_PATH = os.path.join(os.getenv("DATA_DIR", "/app/data"), "quiz_data.db")
 
 # Store active connections and their game data
 active_connections = {}  # {session_id: {client_id, game_id}}
