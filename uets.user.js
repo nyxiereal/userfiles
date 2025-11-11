@@ -1300,6 +1300,7 @@
     try {
       var questionId = data.response.questionId;
       var correctAnswer = data.question.structure.answer;
+      var questionType = data.question.type;
       if (correctAnswer == 0 && data.question.structure.options !== undefined) {
         correctAnswer = data.question.structure.options[0].text;
       }
@@ -1307,12 +1308,13 @@
     catch (e) {
       var questionId = data.data.response.questionId;
       var correctAnswer = data.data.question.structure.answer;
+      var questionType = data.data.question.type;
       if (correctAnswer == 0 && data.data.question.structure.options !== undefined) {
         correctAnswer = data.data.question.structure.options[0].text;
       }
     }
     GM_log(`[*] Sending correct answer (${questionId} <${correctAnswer}>) to server`);
-    sendAnswerToServer(questionId, correctAnswer);
+    sendAnswerToServer(questionId, correctAnswer, questionType);
 
   };
 
@@ -1390,12 +1392,12 @@
     }
   };
 
-  const sendAnswerToServer = async (questionId, correctAnswers) => {
+  const sendAnswerToServer = async (questionId, correctAnswers, answerType = null) => {
     try {
       const response = await fetch(`${sharedState.config.serverUrl}/api/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questionId, correctAnswers }),
+        body: JSON.stringify({ questionId, correctAnswers, answerType }),
       });
       return await response.json();
     } catch (error) {

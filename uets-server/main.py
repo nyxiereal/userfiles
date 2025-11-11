@@ -256,7 +256,9 @@ def submit_answer():
     question_data = get_question(question_id)
 
     if not question_data:
-        return jsonify({"error": "Question not found"}), 404
+        # Create the question with answer if it doesn't exist
+        save_question(question_id, None, correct_answers)
+        return jsonify({"success": True})
 
     # Check if answer already exists
     if question_data.get("correct_answers"):
