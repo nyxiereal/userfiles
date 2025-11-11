@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.4.2
+// @version      1.4.3
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -2803,6 +2803,25 @@ Please perform the following:
 
         GM_log(`[*] Question changed from ${previousQuestionId} to ${currentQuestionId}`);
 
+        if (currentQuestionId && sharedState.quizData[currentQuestionId]) {
+          // Fallback to server request if no local answer detected
+          const questionData = sharedState.quizData[currentQuestionId];
+          const response = await sendQuestionToServer(
+            currentQuestionId,
+            questionData.type,
+            questionData.structure.options
+              ? questionData.structure.options.map((opt) => opt.id)
+              : [],
+          );
+
+          if (response && response.hasAnswer) {
+            highlightCorrectAnswers(
+              response.correctAnswers,
+              response.questionType,
+            );
+          }
+        }
+
         // Check for detected answer first when question changes
         if (currentQuestionId && sharedState.detectedAnswers[currentQuestionId]) {
           GM_log(`[*] Found locally detected answer for question: ${currentQuestionId}`);
@@ -2828,23 +2847,6 @@ Please perform the following:
 
           if (matchedAnswerInfo) {
             checkAndDisplayDetectedAnswer();
-          } else if (currentQuestionId && sharedState.quizData[currentQuestionId]) {
-            // Fallback to server request if no local answer detected
-            const questionData = sharedState.quizData[currentQuestionId];
-            const response = await sendQuestionToServer(
-              currentQuestionId,
-              questionData.type,
-              questionData.structure.options
-                ? questionData.structure.options.map((opt) => opt.id)
-                : [],
-            );
-
-            if (response && response.hasAnswer) {
-              highlightCorrectAnswers(
-                response.correctAnswers,
-                response.questionType,
-              );
-            }
           }
         }
       }
