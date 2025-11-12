@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.4.3
+// @version      1.4.4
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -2421,6 +2421,7 @@ Please perform the following:
         GM_log(`[*] Connecting to UETS-server with clientId: ${sharedState.kahootClientId}, gameId: ${sharedState.kahootGameId}`);
 
         sharedState.kahootSocket = io(sharedState.config.serverUrl, {
+          path: '/api/socket.io',
           transports: ['websocket', 'polling'],
           forceNew: true, // Force a new connection
           timeout: 10000
