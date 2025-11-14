@@ -18,3 +18,9 @@ A multi-cheat tool for some educational platforms.
 2. Install the dependencies with `uv pip install -r requirements.txt`
 3. Run the server with `uv run main.py` (or `uv run gunicorn -w 4 -k eventlet -b 0.0.0.0:5000 main:app`)
 4. The server will be running at `http://localhost:5000`, all answers will be stored in `quiz_data.json`. Logs will be stored in `uets-server.log`.
+
+## ZEUV (**z**awodowe.**e**d**u**.pl **V**iewer)
+A userscript that displays the correct answer toasts for exam questions on zawodowe.edu.pl.
+- Works on zawodowe.edu.pl.
+- Undetected, as the site doesn't have any anti-cheat measures.
+- Simple and lightweight. ~90 LoC compared to UETS's 3800+ LoC.
