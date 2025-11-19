@@ -49,8 +49,10 @@
     includeImages: true,
     enableReactionSpam: true,
     reactionSpamCount: 1,
-    reactionSpamDelay: 2000
+    reactionSpamDelay: 2000,
+    enableSiteOptimizations: false
   };
+
 
   const PROFILES = {
     "True Stealth": {
@@ -58,6 +60,7 @@
       enableTimerHijack: false,
       enableSpoofFullscreen: true,
       enableReactionSpam: false,
+      enableSiteOptimizations: false,
     },
     "Stealthy Extended": {
       enableTimeTakenEdit: true,
@@ -67,6 +70,7 @@
       timerBonusPoints: 200,
       enableSpoofFullscreen: true,
       enableReactionSpam: false,
+      enableSiteOptimizations: false,
     },
     "Creator's choice": {
       enableTimeTakenEdit: true,
@@ -76,6 +80,7 @@
       timerBonusPoints: 270,
       enableSpoofFullscreen: true,
       enableReactionSpam: false,
+      enableSiteOptimizations: true,
     },
     "LMAO": {
       enableTimeTakenEdit: true,
@@ -86,7 +91,8 @@
       enableSpoofFullscreen: true,
       enableReactionSpam: true,
       reactionSpamCount: 2,
-      reactionSpamDelay: 500
+      reactionSpamDelay: 500,
+      enableSiteOptimizations: true,
     },
   };
 
@@ -1568,6 +1574,16 @@
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Blocks sounds, some images, and backgrounds from loading, making the user experience smoother." title="Info"></button>
+            <label class="uets-config-label">Site optimizations</label>
+          </div>
+          <label class="uets-switch">
+            <input type="checkbox" id="enableSiteOptimizations">
+            <span class="uets-switch-slider"></span>
+          </label>
+        </div>
+        <div class="uets-config-item">
+          <div class="uets-config-label-container">
             <button class="uets-config-info" data-info="URL of the server for storing and retrieving answers." title="Info"></button>
             <label class="uets-config-label">Server URL</label>
           </div>
@@ -1721,6 +1737,7 @@
       document.getElementById('enableTimerHijack').checked = sharedState.config.enableTimerHijack;
       document.getElementById('timerBonusPoints').value = sharedState.config.timerBonusPoints;
       document.getElementById('enableSpoofFullscreen').checked = sharedState.config.enableSpoofFullscreen;
+      document.getElementById('enableSiteOptimizations').checked = sharedState.config.enableSiteOptimizations;
       document.getElementById('serverUrl').value = sharedState.config.serverUrl;
       document.getElementById('geminiApiKey').value = sharedState.config.geminiApiKey;
       document.getElementById('includeImages').checked = sharedState.config.includeImages;
@@ -1751,6 +1768,7 @@
       sharedState.config.enableTimerHijack = document.getElementById('enableTimerHijack').checked;
       sharedState.config.timerBonusPoints = parseInt(document.getElementById('timerBonusPoints').value);
       sharedState.config.enableSpoofFullscreen = document.getElementById('enableSpoofFullscreen').checked;
+      sharedState.config.enableSiteOptimizations = document.getElementById('enableSiteOptimizations').checked;
       sharedState.config.serverUrl = document.getElementById('serverUrl').value;
       sharedState.config.geminiApiKey = document.getElementById('geminiApiKey').value;
       sharedState.config.includeImages = document.getElementById('includeImages').checked;
@@ -1792,6 +1810,7 @@
           document.getElementById('enableTimerHijack').checked = profile.enableTimerHijack;
           document.getElementById('timerBonusPoints').value = profile.timerBonusPoints;
           document.getElementById('enableSpoofFullscreen').checked = profile.enableSpoofFullscreen;
+          document.getElementById('enableSiteOptimizations').checked = profile.enableSiteOptimizations;
         }
       });
     });
@@ -1964,6 +1983,8 @@ Please perform the following:
     };
 
     showResponsePopup("Loading AI insights...", true, "AI Assistant");
+
+    console.log(JSON.stringify(apiPayload));
 
     GM_xmlhttpRequest({
       method: "POST",
@@ -2742,6 +2763,42 @@ Please perform the following:
     }
   };
 
+  // === SITE OPTIMIZATIONS ===
+  const siteOptimizations = {
+    // Dark purple 1280x720 SVG
+    darkPurpleSVG: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4MCIgaGVpZ2h0PSI3MjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyODAiIGhlaWdodD0iNzIwIiBmaWxsPSIjNGYzNzhiIi8+PC9zdmc+',
+
+    blockedPatterns: [
+      /^https:\/\/cf\.quizizz\.com\/.*\.mp3$/,
+      /^https:\/\/cf\.quizizz\.com\/game\/img\/liveReactions\/.*\.png$/,
+      /^https:\/\/cf\.quizizz\.com\/img\/game\/Reopen_Icon\.svg$/,
+      /^https:\/\/wayground\.com\/_media\/testpixel\.png$/,
+      /^https:\/\/media\.wayground\.com\/resource\/gs\/quizizz-media\/testpixel\.png$/,
+      /^https:\/\/quizizz\.com\/_media\/testpixel\.png$/
+    ],
+
+    replacedUrls: {
+      'https://cf.quizizz.com/themes/v2/classic/joinLobbyWClassic.svg': null,
+      'https://cf.quizizz.com/themes/v2/classic/joinClassicWBg.jpg': null
+    },
+
+    shouldBlockUrl: (url) => {
+      if (!sharedState.config.enableSiteOptimizations) return false;
+      return siteOptimizations.blockedPatterns.some(pattern => pattern.test(url));
+    },
+
+    shouldReplaceUrl: (url) => {
+      if (!sharedState.config.enableSiteOptimizations) return false;
+      return url in siteOptimizations.replacedUrls;
+    },
+
+    getReplacementUrl: (url) => {
+      if (siteOptimizations.shouldReplaceUrl(url)) {
+        return siteOptimizations.darkPurpleSVG;
+      }
+      return url;
+    }
+  };
 
   // WAYGROUND MODULE
   const waygroundModule = {
@@ -3483,6 +3540,21 @@ Please perform the following:
     this._method = method;
     this._url = url;
 
+    // Check if URL should be blocked
+    if (siteOptimizations.shouldBlockUrl(url)) {
+      this._shouldBlock = true;
+      GM_log(`[+] Marked XHR for blocking: ${url}`);
+      // Still call original open to prevent errors
+      return originalXMLHttpRequestOpen.call(this, method, url, ...args);
+    }
+
+    // Check if URL should be replaced
+    if (siteOptimizations.shouldReplaceUrl(url)) {
+      const newUrl = siteOptimizations.getReplacementUrl(url);
+      GM_log(`[+] Replacing XHR URL: ${url} -> dark purple image`);
+      return originalXMLHttpRequestOpen.call(this, method, newUrl, ...args);
+    }
+
     if (
       typeof url === "string" &&
       (url.includes("play-api/createTestGameActivity") && (url.includes("wayground.com") || url.includes("quizizz.com")))
@@ -3531,6 +3603,72 @@ Please perform the following:
   };
 
   XMLHttpRequest.prototype.send = function (data) {
+    // Handle site optimization blocks
+    if (this._shouldBlock) {
+      GM_log(`[+] Blocked XHR send: ${this._url}`);
+
+      // Create a proper mock response
+      const xhr = this;
+
+      // Set response properties before triggering events
+      Object.defineProperty(xhr, 'readyState', {
+        get: () => 4,
+        configurable: true
+      });
+      Object.defineProperty(xhr, 'status', {
+        get: () => 200,
+        configurable: true
+      });
+      Object.defineProperty(xhr, 'statusText', {
+        get: () => 'OK',
+        configurable: true
+      });
+      Object.defineProperty(xhr, 'response', {
+        get: () => '',
+        configurable: true
+      });
+      Object.defineProperty(xhr, 'responseText', {
+        get: () => '',
+        configurable: true
+      });
+      Object.defineProperty(xhr, 'responseType', {
+        get: () => '',
+        configurable: true
+      });
+      Object.defineProperty(xhr, 'responseXML', {
+        get: () => null,
+        configurable: true
+      });
+
+      // Trigger events asynchronously to simulate real behavior
+      setTimeout(() => {
+        // Dispatch events in proper order
+        if (xhr.onloadstart) {
+          xhr.onloadstart.call(xhr, new ProgressEvent('loadstart'));
+        }
+
+        if (xhr.onreadystatechange) {
+          xhr.onreadystatechange.call(xhr);
+        }
+
+        if (xhr.onload) {
+          xhr.onload.call(xhr, new ProgressEvent('load'));
+        }
+
+        if (xhr.onloadend) {
+          xhr.onloadend.call(xhr, new ProgressEvent('loadend'));
+        }
+
+        // Dispatch events to event listeners
+        xhr.dispatchEvent(new ProgressEvent('loadstart'));
+        xhr.dispatchEvent(new Event('readystatechange'));
+        xhr.dispatchEvent(new ProgressEvent('load'));
+        xhr.dispatchEvent(new ProgressEvent('loadend'));
+      }, 0);
+
+      return;
+    }
+
     // Block cheating detection requests
     if (this._blocked) {
       GM_log("[+] Cheating detection request blocked - not sending data");
@@ -3612,6 +3750,28 @@ Please perform the following:
 
   const originalFetch = window.fetch;
   window.fetch = function (url, options) {
+    const urlString = typeof url === 'string' ? url : url.url || url.href;
+
+    // Block site optimization URLs
+    if (siteOptimizations.shouldBlockUrl(urlString)) {
+      GM_log(`[+] Blocked fetch: ${urlString}`);
+      // Return a proper Response with all necessary properties
+      return Promise.resolve(new Response(null, {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({
+          'Content-Type': 'application/octet-stream'
+        })
+      }));
+    }
+
+    // Replace theme URLs
+    if (siteOptimizations.shouldReplaceUrl(urlString)) {
+      const newUrl = siteOptimizations.getReplacementUrl(urlString);
+      GM_log(`[+] Replacing fetch URL: ${urlString} -> dark purple image`);
+      return originalFetch.call(this, newUrl, options);
+    }
+
     // Block cheating detection requests
     if (
       typeof url === "string" &&
