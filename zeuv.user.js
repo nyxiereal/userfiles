@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Zawodowe Correct Answer Toast
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0
+// @version      1.0.1
 // @author       Nyx
 // @license      GPL-3.0
 // @description  Display the correct answer label for exam questions.
@@ -25,7 +25,7 @@
       top: 16px;
       right: 16px;
       padding: 8px 14px;
-      background: #1b1f3b;
+      background: #dbdbdb;
       color: #fff;
       font-size: 20px;
       font-weight: 600;
@@ -34,7 +34,7 @@
       z-index: 9999;
     `;
         document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 2000);
+        setTimeout(() => toast.remove(), 750);
     };
 
     const handlePayload = (payload) => {
