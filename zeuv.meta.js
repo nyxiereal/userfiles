@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Zawodowe Correct Answer Toast
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0
+// @version      1.0.1
 // @author       Nyx
 // @license      GPL-3.0
 // @description  Display the correct answer label for exam questions.
