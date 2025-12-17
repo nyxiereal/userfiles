@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.4.4
+// @version      1.4.5
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -120,7 +120,8 @@
     kahootCurrentQuestion: null,
     kahootAnswerCounts: {},
     kahootHasConnected: false,
-    detectedAnswers: {}
+    detectedAnswers: {},
+    toastDismissTimeout: null
   };
 
   // === SHARED STYLES ===
@@ -647,31 +648,51 @@
   }
 
   .uets-correct-answer {
-    background: rgba(76, 175, 80, 0.12) !important;
-    border: 2px solid #4CAF50 !important;
+    background: rgba(76, 175, 80, 0.2) !important;
+    border: 3px solid #4CAF50 !important;
     border-radius: 12px !important;
+    box-shadow: 0 0 12px rgba(76, 175, 80, 0.5), inset 0 0 8px rgba(76, 175, 80, 0.15) !important;
+    animation: uets-correct-pulse 2s ease-in-out infinite !important;
+  }
+
+  @keyframes uets-correct-pulse {
+    0%, 100% {
+      box-shadow: 0 0 12px rgba(76, 175, 80, 0.5), inset 0 0 8px rgba(76, 175, 80, 0.15);
+    }
+    50% {
+      box-shadow: 0 0 20px rgba(76, 175, 80, 0.7), inset 0 0 12px rgba(76, 175, 80, 0.25);
+    }
   }
 
   .uets-answer-indicator {
     position: absolute;
     top: 8px;
     right: 8px;
-    background: #4CAF50;
+    background: linear-gradient(135deg, #4CAF50, #45a049);
     color: white;
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 16px;
+    font-size: 14px;
+    font-weight: 700;
     z-index: 1000;
     font-family: 'Material Icons Outlined';
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 4px;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
   }
 
   .uets-answer-indicator::before {
-    content: 'check';
-    font-size: 16px;
+    content: 'star';
+    font-size: 18px;
+  }
+
+  .uets-answer-indicator::after {
+    content: 'Correct';
+    font-family: 'Roboto', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
   }
 
   .uets-streak-bonus {
@@ -1440,21 +1461,42 @@
     showCorrectAnswersModal(correctAnswers, questionType, currentQuestion);
 
     // Still highlight the buttons if possible
-    optionButtons.forEach((button) => {
+    // Convert correctAnswers to array if it's a single value
+    const correctIndices = Array.isArray(correctAnswers) ? correctAnswers : [correctAnswers];
+
+    optionButtons.forEach((button, buttonIndex) => {
+      // Try to get option index from data-cy attribute (format: "option-X")
+      const dataCy = button.getAttribute("data-cy");
+      let optionIndex = buttonIndex;
+      if (dataCy && dataCy.startsWith("option-")) {
+        const parsedIndex = parseInt(dataCy.replace("option-", ""), 10);
+        if (!isNaN(parsedIndex)) {
+          optionIndex = parsedIndex;
+        }
+      }
+
+      // Also try data-option-id for backwards compatibility
       const optionId =
         button.getAttribute("data-option-id") ||
         button
           .querySelector("[data-option-id]")
           ?.getAttribute("data-option-id");
 
-      if (optionId && correctAnswers.includes(optionId)) {
+      // Check if this button matches any correct answer (by index or ID)
+      const isCorrect = correctIndices.includes(optionIndex) ||
+        (optionId && correctIndices.includes(optionId));
+
+      if (isCorrect) {
         button.classList.add("uets-correct-answer");
         button.style.position = "relative";
 
-        const indicator = document.createElement("div");
-        indicator.className = "uets-answer-indicator";
-        indicator.textContent = "✓";
-        button.appendChild(indicator);
+        // Only add indicator if not already present
+        if (!button.querySelector(".uets-answer-indicator")) {
+          const indicator = document.createElement("div");
+          indicator.className = "uets-answer-indicator";
+          indicator.textContent = "";
+          button.appendChild(indicator);
+        }
       }
     });
   };
@@ -2056,10 +2098,18 @@ Please perform the following:
     }
 
     let popup = document.getElementById("uets-gemini-popup");
-    let dismissTimeout;
+
+    // Clear any existing dismiss timeout when updating toast
+    if (sharedState.toastDismissTimeout) {
+      clearTimeout(sharedState.toastDismissTimeout);
+      sharedState.toastDismissTimeout = null;
+    }
 
     const removePopup = () => {
-      if (dismissTimeout) clearTimeout(dismissTimeout);
+      if (sharedState.toastDismissTimeout) {
+        clearTimeout(sharedState.toastDismissTimeout);
+        sharedState.toastDismissTimeout = null;
+      }
       if (popup) {
         popup.classList.add("uets-toast-dismiss");
         setTimeout(() => {
@@ -2093,10 +2143,10 @@ Please perform the following:
 
       document.body.appendChild(popup);
       sharedState.geminiPopup = popup;
-    } else {
-      // Clear existing timeout if updating existing popup
-      if (dismissTimeout) clearTimeout(dismissTimeout);
     }
+
+    // Reset the dismiss animation class if popup was being dismissed
+    popup.classList.remove("uets-toast-dismiss");
 
     const contentDiv = popup.querySelector(".uets-response-popup-content");
     if (isLoading) {
@@ -2120,9 +2170,9 @@ Please perform the following:
 
     popup.style.display = "flex";
 
-    // Auto-dismiss after 5 seconds (only if not loading)
+    // Auto-dismiss after 7.5 seconds (only if not loading)
     if (!isLoading) {
-      dismissTimeout = setTimeout(() => {
+      sharedState.toastDismissTimeout = setTimeout(() => {
         removePopup();
       }, 7500);
     }
