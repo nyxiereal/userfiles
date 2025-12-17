@@ -2234,6 +2234,16 @@ Please perform the following:
           sharedState.geminiPopup = null;
         }
 
+        // Remove correct answer highlighting
+        document.querySelectorAll("button.option.uets-correct-answer").forEach((button) => {
+          button.classList.remove("uets-correct-answer");
+          button.style.position = "";
+          const indicator = button.querySelector(".uets-answer-indicator");
+          if (indicator) {
+            indicator.remove();
+          }
+        });
+
         document.querySelectorAll(".uets-option-wrapper").forEach((wrapper) => {
           const button = wrapper.querySelector("button.option");
           if (button && wrapper.parentNode) {
