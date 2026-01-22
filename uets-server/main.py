@@ -771,9 +771,6 @@ def viewer():
         
         // Initial load
         loadData();
-        
-        // Auto-refresh every 5 seconds
-        setInterval(loadData, 5000);
     </script>
 </body>
 </html>

@@ -18,3 +18,23 @@ A multi-cheat tool for some educational platforms.
 2. Install the dependencies with `uv pip install -r requirements.txt`
 3. Run the server with `uv run main.py` (or `uv run gunicorn -w 4 -k eventlet -b 0.0.0.0:5000 main:app`)
 4. The server will be running at `http://localhost:5000`, all answers will be stored in `quiz_data.json`. Logs will be stored in `uets-server.log`.
+
+OR
+
+1. Install Docker
+2. Create this `docker-compose.yml` file:
+    ```yaml
+    services:
+        uets-server:
+            environment:
+            - PYTHONUNBUFFERED=1
+            image: ghcr.io/nyxiereal/userfiles/uets-server:latest
+            ports:
+            - '5000:5000'
+            restart: unless-stopped
+            volumes:
+            - /path/to/your/uets/data:/app/data
+    ```
+3. Run `docker compose up -d`
+4. The server will be running at `http://localhost:5000`, all answers will be stored in `quiz_data.db`. Logs will be stored in `uets-server.log`. Websocket commections are handled filelessly.
+5. Now you can open the web interface at `http://localhost:5000`. Set the same URL in the userscript settings.
