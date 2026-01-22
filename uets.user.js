@@ -161,25 +161,21 @@
   };
 
   // === SHARED UTILITIES ===
-  const createButton = (text, className, onClick) => {
-    const button = document.createElement("button");
-    button.textContent = text;
-    button.classList.add(...className.split(" "));
-    button.type = "button";
-    button.onclick = onClick;
-    return button;
-  };
+  const createButton = (text, className, onClick) => Object.assign(document.createElement("button"), {
+    textContent: text,
+    type: "button",
+    onclick: onClick,
+    className
+  });
 
-  const createLink = (text, href, className, onClick) => {
-    const link = document.createElement("a");
-    link.textContent = text;
-    link.href = href;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.classList.add(...className.split(" "));
-    if (onClick) link.onclick = onClick;
-    return link;
-  };
+  const createLink = (text, href, className, onClick) => Object.assign(document.createElement("a"), {
+    textContent: text,
+    href,
+    target: "_blank",
+    rel: "noopener noreferrer",
+    className,
+    onclick: onClick || null
+  });
 
   const addQuestionButtons = (
     container,
@@ -313,25 +309,20 @@
   };
 
   const processProceedGameResponse = (data) => {
-    try {
-      var questionId = data.response.questionId;
-      var correctAnswer = data.question.structure.answer;
-      var questionType = data.question.type;
-      if (correctAnswer == 0 && data.question.structure.options !== undefined) {
-        correctAnswer = data.question.structure.options[0].text;
-      }
+    const responseData = data?.response || data?.data?.response;
+    const questionData = data?.question || data?.data?.question;
+    if (!responseData || !questionData) {
+      GM_log("[!] Could not extract response/question data");
+      return;
     }
-    catch (e) {
-      var questionId = data.data.response.questionId;
-      var correctAnswer = data.data.question.structure.answer;
-      var questionType = data.data.question.type;
-      if (correctAnswer == 0 && data.data.question.structure.options !== undefined) {
-        correctAnswer = data.data.question.structure.options[0].text;
-      }
+    const questionId = responseData.questionId;
+    const questionType = questionData.type;
+    let correctAnswer = questionData.structure?.answer;
+    if (correctAnswer === 0 && questionData.structure?.options?.[0]) {
+      correctAnswer = questionData.structure.options[0].text;
     }
     GM_log(`[*] Sending correct answer (${questionId} <${correctAnswer}>) to server`);
     sendAnswerToServer(questionId, correctAnswer, questionType);
-
   };
 
   // === SPOOF FULLSCREEN AND FOCUS ===
@@ -354,10 +345,7 @@
     });
 
     // Override window.focus to do nothing
-    const originalFocus = window.focus;
-    window.focus = () => {
-      // Simulate focus without actually focusing
-    };
+    window.focus = () => {};
 
     // Spoof visibility state
     Object.defineProperty(document, "visibilityState", {
@@ -394,33 +382,25 @@
   };
 
   // === SERVER COMMUNICATION ===
-  const sendQuestionToServer = async (questionId, questionType, answerIds) => {
+  const postToServer = async (endpoint, data) => {
     try {
-      const response = await fetch(`${sharedState.config.serverUrl}/api/question`, {
+      const response = await fetch(`${sharedState.config.serverUrl}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questionId, questionType, answerIds }),
+        body: JSON.stringify(data),
       });
       return await response.json();
     } catch (error) {
-      GM_log("[!] Error sending question to server:", error);
+      GM_log(`[!] Error posting to ${endpoint}:`, error);
       return null;
     }
   };
 
-  const sendAnswerToServer = async (questionId, correctAnswers, answerType = null) => {
-    try {
-      const response = await fetch(`${sharedState.config.serverUrl}/api/answer`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questionId, correctAnswers, answerType }),
-      });
-      return await response.json();
-    } catch (error) {
-      GM_log("[!] Error sending answer to server:", error);
-      return null;
-    }
-  };
+  const sendQuestionToServer = (questionId, questionType, answerIds) =>
+    postToServer("/api/question", { questionId, questionType, answerIds });
+
+  const sendAnswerToServer = (questionId, correctAnswers, answerType = null) =>
+    postToServer("/api/answer", { questionId, correctAnswers, answerType });
 
   // === ANSWER HIGHLIGHTING ===
   const highlightCorrectAnswers = (correctAnswers, questionType) => {
@@ -429,28 +409,14 @@
     const optionButtons = document.querySelectorAll("button.option");
     optionButtons.forEach((button) => {
       button.classList.remove("uets-correct-answer");
-      const indicator = button.querySelector(".uets-answer-indicator");
-      if (indicator) indicator.remove();
+      button.querySelector(".uets-answer-indicator")?.remove();
     });
 
-    if (questionType === "BLANK") {
-      showCorrectAnswersModal(correctAnswers, questionType);
-      return;
-    }
-
-    // Get the current question data to match answer IDs to text
-    const currentQuestion =
-      sharedState.questionsPool[sharedState.currentQuestionId];
-    if (!currentQuestion) {
-      showCorrectAnswersModal(correctAnswers, questionType);
-      return;
-    }
-
-    // Display the correct answers in a modal
+    const currentQuestion = sharedState.questionsPool[sharedState.currentQuestionId];
     showCorrectAnswersModal(correctAnswers, questionType, currentQuestion);
 
-    // Still highlight the buttons if possible
-    // Convert correctAnswers to array if it's a single value
+    if (questionType === "BLANK" || !currentQuestion) return;
+
     const correctIndices = Array.isArray(correctAnswers) ? correctAnswers : [correctAnswers];
 
     optionButtons.forEach((button, buttonIndex) => {
@@ -1015,8 +981,6 @@ Please perform the following:
 
     showResponsePopup("Loading AI insights...", true, "AI Assistant");
 
-    console.log(JSON.stringify(apiPayload));
-
     GM_xmlhttpRequest({
       method: "POST",
       url: apiUrl,
@@ -1428,29 +1392,18 @@ Please perform the following:
     CONTROLLER_CHANNEL: '/service/controller',
     COLORS: ['red', 'blue', 'yellow', 'green'],
 
-    loadSocketIO: () => {
-      return new Promise((resolve, reject) => {
-        if (window.io) {
-          resolve();
-          return;
-        }
-        const script = document.createElement('script');
-        script.src = 'https://cdn.socket.io/4.8.1/socket.io.min.js';
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error('Failed to load Socket.IO'));
-        document.head.appendChild(script);
-      });
-    },
+    loadSocketIO: () => new Promise((resolve, reject) => {
+      if (window.io) return resolve();
+      const script = document.createElement('script');
+      script.src = 'https://cdn.socket.io/4.8.1/socket.io.min.js';
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('Failed to load Socket.IO'));
+      document.head.appendChild(script);
+    }),
 
     isCometDEndpoint: url => url.includes('/cometd/') && url.includes('kahoot.it'),
 
-    parseJSON: data => {
-      try {
-        return typeof data === 'string' ? JSON.parse(data) : data;
-      } catch {
-        return null;
-      }
-    },
+    parseJSON: data => { try { return typeof data === 'string' ? JSON.parse(data) : data; } catch { return null; } },
 
     extractQuizData: content => {
       const parsed = kahootModule.parseJSON(content);
@@ -2452,36 +2405,16 @@ Please perform the following:
 
   const processQuizData = (data) => {
     GM_log("[*] Trying to get all questions...");
-    try {
-      var questionKeys = Object.keys(data.data.room.questions);
-    } catch (e) {
-      try {
-        var questionKeys = Object.keys(data.room.questions);
-      } catch (e) {
-        try {
-          var questionKeys = Object.keys(data.quiz.info.questions);
-        } catch (e) {
-          var questionKeys = Object.keys(data.data.quiz.info.questions);
-        }
-      }
+    const questions = data?.data?.room?.questions || data?.room?.questions || data?.quiz?.info?.questions || data?.data?.quiz?.info?.questions;
+    if (!questions) {
+      GM_log("[!] Could not find questions in data");
+      return;
     }
+    const questionKeys = Object.keys(questions);
 
     for (const questionKey of questionKeys) {
       GM_log("[*] ----------------");
-      try {
-        var questionData = data.data.room.questions[questionKey];
-      } catch (e) {
-        try {
-          var questionData = data.room.questions[questionKey];
-        } catch (e) {
-          try {
-            var questionData = data.quiz.info.questions[questionKey];
-          } catch (e) {
-            var questionData = data.data.quiz.info.questions[questionKey];
-          }
-        }
-      }
-      console.log(questionData);
+      const questionData = questions[questionKey];
       sharedState.quizData[questionKey] = questionData;
 
       // Store the complete question data in questionsPool
@@ -2490,20 +2423,12 @@ Please perform the following:
       GM_log(`[+] Question ID: ${questionKey}`);
       GM_log(`[+] Question Type: ${questionData.type}`);
       GM_log(`[+] Question Text: ${questionData.structure.query.text}`);
-      if (questionData.structure.query.media) {
-        for (const media of questionData.structure.query.media) {
-          GM_log(`[+] Media URL: ${media.url} (Type: ${media.type})`);
-        }
-      }
-      const options = questionData.structure.options || [];
-      for (const option of options) {
+      questionData.structure.query.media?.forEach(media => GM_log(`[+] Media URL: ${media.url} (Type: ${media.type})`));
+      const options = questionData.structure?.options || [];
+      options.forEach(option => {
         GM_log(`[+] Option: ${option.text} (${option.id})`);
-        if (option.media) {
-          for (const media of option.media) {
-            GM_log(`[+] Media URL: ${media.url} (Type: ${media.type})`);
-          }
-        }
-      }
+        option.media?.forEach(media => GM_log(`[+] Media URL: ${media.url} (Type: ${media.type})`));
+      });
 
       // Enhanced answer detection and storage
       if (questionData.structure && questionData.structure.answer !== undefined) {
@@ -2604,46 +2529,31 @@ Please perform the following:
       return originalXMLHttpRequestOpen.call(this, method, newUrl, ...args);
     }
 
-    if (
-      typeof url === "string" &&
-      (url.includes("play-api/createTestGameActivity") && (url.includes("wayground.com") || url.includes("quizizz.com")))
-    ) {
+    const isWaygroundOrQuizizz = url => url.includes("wayground.com") || url.includes("quizizz.com");
+
+    if (typeof url === "string" && url.includes("play-api/createTestGameActivity") && isWaygroundOrQuizizz(url)) {
       this._blocked = true;
       GM_log("[+] Blocked cheating detection request to createTestGameActivity");
     }
 
-    if (
-      typeof url === "string" &&
-      (((url.includes("play-api") &&
-        (url.includes("soloJoin") || url.includes("rejoinGame") || url.includes("join"))) || (url.includes("_quizserver/main/v2/quiz"))) &&
-        (url.includes("wayground.com") || url.includes("quizizz.com")))
-    ) {
+    const isQuizJoinUrl = url => (url.includes("play-api") && /soloJoin|rejoinGame|join/.test(url)) || url.includes("_quizserver/main/v2/quiz");
+
+    if (typeof url === "string" && isQuizJoinUrl(url) && isWaygroundOrQuizizz(url)) {
       this.addEventListener("load", function () {
         if (this.status === 200) {
-          try {
-            const data = JSON.parse(this.responseText);
-            processQuizData(data);
-          } catch (e) {
-            GM_log("[!] Failed to parse response:", e);
-          }
+          try { processQuizData(JSON.parse(this.responseText)); }
+          catch (e) { GM_log("[!] Failed to parse response:", e); }
         }
       });
     }
 
-    if (
-      typeof url === "string" &&
-      (url.includes("play-api") &&
-        (url.includes("proceedGame") || url.includes("soloProceed")) &&
-        (url.includes("wayground.com") || url.includes("quizizz.com")))
-    ) {
+    const isProceedUrl = url => url.includes("play-api") && /proceedGame|soloProceed/.test(url);
+
+    if (typeof url === "string" && isProceedUrl(url) && isWaygroundOrQuizizz(url)) {
       this.addEventListener("load", function () {
         if (this.status === 200) {
-          try {
-            const data = JSON.parse(this.responseText);
-            processProceedGameResponse(data);
-          } catch (e) {
-            GM_log("[!] Failed to parse proceedGame response:", e);
-          }
+          try { processProceedGameResponse(JSON.parse(this.responseText)); }
+          catch (e) { GM_log("[!] Failed to parse proceedGame response:", e); }
         }
       });
     }
@@ -2655,66 +2565,16 @@ Please perform the following:
     // Handle site optimization blocks
     if (this._shouldBlock) {
       GM_log(`[+] Blocked XHR send: ${this._url}`);
-
-      // Create a proper mock response
       const xhr = this;
-
-      // Set response properties before triggering events
-      Object.defineProperty(xhr, 'readyState', {
-        get: () => 4,
-        configurable: true
-      });
-      Object.defineProperty(xhr, 'status', {
-        get: () => 200,
-        configurable: true
-      });
-      Object.defineProperty(xhr, 'statusText', {
-        get: () => 'OK',
-        configurable: true
-      });
-      Object.defineProperty(xhr, 'response', {
-        get: () => '',
-        configurable: true
-      });
-      Object.defineProperty(xhr, 'responseText', {
-        get: () => '',
-        configurable: true
-      });
-      Object.defineProperty(xhr, 'responseType', {
-        get: () => '',
-        configurable: true
-      });
-      Object.defineProperty(xhr, 'responseXML', {
-        get: () => null,
-        configurable: true
-      });
-
-      // Trigger events asynchronously to simulate real behavior
+      const mockProps = { readyState: 4, status: 200, statusText: 'OK', response: '', responseText: '', responseType: '', responseXML: null };
+      Object.entries(mockProps).forEach(([k, v]) => Object.defineProperty(xhr, k, { get: () => v, configurable: true }));
       setTimeout(() => {
-        // Dispatch events in proper order
-        if (xhr.onloadstart) {
-          xhr.onloadstart.call(xhr, new ProgressEvent('loadstart'));
-        }
-
-        if (xhr.onreadystatechange) {
-          xhr.onreadystatechange.call(xhr);
-        }
-
-        if (xhr.onload) {
-          xhr.onload.call(xhr, new ProgressEvent('load'));
-        }
-
-        if (xhr.onloadend) {
-          xhr.onloadend.call(xhr, new ProgressEvent('loadend'));
-        }
-
-        // Dispatch events to event listeners
-        xhr.dispatchEvent(new ProgressEvent('loadstart'));
-        xhr.dispatchEvent(new Event('readystatechange'));
-        xhr.dispatchEvent(new ProgressEvent('load'));
-        xhr.dispatchEvent(new ProgressEvent('loadend'));
+        ['loadstart', 'readystatechange', 'load', 'loadend'].forEach(evt => {
+          const handler = xhr[`on${evt}`];
+          if (handler) handler.call(xhr, evt === 'readystatechange' ? new Event(evt) : new ProgressEvent(evt));
+          xhr.dispatchEvent(evt === 'readystatechange' ? new Event(evt) : new ProgressEvent(evt));
+        });
       }, 0);
-
       return;
     }
 
@@ -2725,22 +2585,14 @@ Please perform the following:
     }
 
     // Intercept TestPortal requests and force wb=0
-    if (
-      this._method === "POST" &&
-      this._url &&
-      (this._url.includes("testportal.net") || this._url.includes("testportal.pl")) &&
-      this._url.includes("DoTestQuestion.html") &&
-      data &&
-      typeof data === "string"
-    ) {
+    const isTestPortal = this._url?.includes("testportal.net") || this._url?.includes("testportal.pl");
+    if (this._method === "POST" && isTestPortal && this._url.includes("DoTestQuestion.html") && typeof data === "string") {
       try {
         const urlParams = new URLSearchParams(data);
         if (urlParams.has('wb')) {
-          const originalWb = urlParams.get('wb');
           urlParams.set('wb', '0');
-          const modifiedData = urlParams.toString();
-          GM_log(`[+] Modified TestPortal wb parameter from ${originalWb} to 0`);
-          return originalXMLHttpRequestSend.call(this, modifiedData);
+          GM_log(`[+] Modified TestPortal wb parameter to 0`);
+          return originalXMLHttpRequestSend.call(this, urlParams.toString());
         }
       } catch (e) {
         GM_log("[!] Failed to modify TestPortal request:", e);
@@ -2748,48 +2600,26 @@ Please perform the following:
     }
 
     // Intercept POST requests to proceedGame and modify timeTaken
-    if (
-      this._method === "POST" &&
-      this._url &&
-      (this._url.includes("play-api") &&
-        (this._url.includes("proceedGame") || this._url.includes("soloProceed")) &&
-        (this._url.includes("wayground.com") || this._url.includes("quizizz.com")))
-    ) {
-      if (data) {
-        try {
-          let requestData = JSON.parse(data);
-
-          requestData = processProceedGameRequest(requestData);
-
-          const modifiedData = JSON.stringify(requestData);
-
-          return originalXMLHttpRequestSend.call(this, modifiedData);
-        } catch (e) {
-          GM_log("[!] Failed to parse/modify proceedGame request:", e);
-          return originalXMLHttpRequestSend.call(this, data);
-        }
+    const isProceed = this._url?.includes("play-api") && /proceedGame|soloProceed/.test(this._url);
+    const isWaygroundQuizizz = this._url?.includes("wayground.com") || this._url?.includes("quizizz.com");
+    if (this._method === "POST" && isProceed && isWaygroundQuizizz && data) {
+      try {
+        return originalXMLHttpRequestSend.call(this, JSON.stringify(processProceedGameRequest(JSON.parse(data))));
+      } catch (e) {
+        GM_log("[!] Failed to parse/modify proceedGame request:", e);
       }
     }
 
-    // Intercept requests to reaction-update and resend twice
-    if (
-      this._method === "POST" &&
-      this._url &&
-      (this._url.includes("wayground.com") || this._url.includes("quizizz.com")) &&
-      this._url.includes("_gameapi/main/public/v1/games/",) &&
-      this._url.includes("/reaction-update")
-    ) {
-      // Send original request
+    // Intercept requests to reaction-update and resend
+    const isReactionUpdate = isWaygroundQuizizz && this._url?.includes("_gameapi/main/public/v1/games/") && this._url?.includes("/reaction-update");
+    if (this._method === "POST" && isReactionUpdate && sharedState.config.enableReactionSpam) {
       const result = originalXMLHttpRequestSend.call(this, data);
-      // Resend based on config
-      if (sharedState.config.enableReactionSpam) {
-        for (let i = 1; i <= sharedState.config.reactionSpamCount; i++) {
-          setTimeout(() => {
-            const xhr = new XMLHttpRequest();
-            xhr.open(this._method, this._url);
-            xhr.send(data);
-          }, sharedState.config.reactionSpamDelay * i);
-        }
+      for (let i = 1; i <= sharedState.config.reactionSpamCount; i++) {
+        setTimeout(() => {
+          const xhr = new XMLHttpRequest();
+          xhr.open(this._method, this._url);
+          xhr.send(data);
+        }, sharedState.config.reactionSpamDelay * i);
       }
       return result;
     }
@@ -2799,60 +2629,36 @@ Please perform the following:
 
   const originalFetch = window.fetch;
   window.fetch = function (url, options) {
-    const urlString = typeof url === 'string' ? url : url.url || url.href;
+    const urlString = typeof url === 'string' ? url : url?.url || url?.href || '';
+    const isWaygroundQuizizz = urlString.includes("wayground.com") || urlString.includes("quizizz.com");
+    const isTestPortal = urlString.includes("testportal.net") || urlString.includes("testportal.pl");
 
     // Block site optimization URLs
     if (siteOptimizations.shouldBlockUrl(urlString)) {
       GM_log(`[+] Blocked fetch: ${urlString}`);
-      // Return a proper Response with all necessary properties
-      return Promise.resolve(new Response(null, {
-        status: 200,
-        statusText: 'OK',
-        headers: new Headers({
-          'Content-Type': 'application/octet-stream'
-        })
-      }));
+      return Promise.resolve(new Response(null, { status: 200, statusText: 'OK', headers: new Headers({ 'Content-Type': 'application/octet-stream' }) }));
     }
 
     // Replace theme URLs
     if (siteOptimizations.shouldReplaceUrl(urlString)) {
-      const newUrl = siteOptimizations.getReplacementUrl(urlString);
       GM_log(`[+] Replacing fetch URL: ${urlString} -> dark purple image`);
-      return originalFetch.call(this, newUrl, options);
+      return originalFetch.call(this, siteOptimizations.getReplacementUrl(urlString), options);
     }
 
     // Block cheating detection requests
-    if (
-      typeof url === "string" &&
-      (url.includes("play-api/createTestGameActivity") && (url.includes("wayground.com") || url.includes("quizizz.com")))
-    ) {
+    if (urlString.includes("play-api/createTestGameActivity") && isWaygroundQuizizz) {
       GM_log("[+] Blocked cheating detection request to createTestGameActivity");
-      return Promise.resolve(
-        new Response(JSON.stringify({}), { status: 200, statusText: "OK" }),
-      );
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200, statusText: "OK" }));
     }
 
     // Intercept TestPortal requests via fetch and force wb=0
-    if (
-      typeof url === "string" &&
-      (url.includes("testportal.net") || url.includes("testportal.pl")) &&
-      url.includes("DoTestQuestion.html") &&
-      options &&
-      options.method === "POST" &&
-      options.body &&
-      typeof options.body === "string"
-    ) {
+    if (isTestPortal && urlString.includes("DoTestQuestion.html") && options?.method === "POST" && typeof options.body === "string") {
       try {
         const urlParams = new URLSearchParams(options.body);
         if (urlParams.has('wb')) {
-          const originalWb = urlParams.get('wb');
           urlParams.set('wb', '0');
-          const modifiedOptions = {
-            ...options,
-            body: urlParams.toString(),
-          };
-          GM_log(`[+] Modified TestPortal wb parameter from ${originalWb} to 0`);
-          return originalFetch.call(this, url, modifiedOptions);
+          GM_log(`[+] Modified TestPortal wb parameter to 0`);
+          return originalFetch.call(this, url, { ...options, body: urlParams.toString() });
         }
       } catch (e) {
         GM_log("[!] Failed to modify TestPortal fetch request:", e);
@@ -2860,91 +2666,36 @@ Please perform the following:
     }
 
     // Intercept POST requests to proceedGame via fetch
-    if (
-      typeof url === "string" &&
-      (url.includes("play-api") &&
-        (url.includes("proceedGame") || url.includes("soloProceed")) &&
-        (url.includes("wayground.com") || url.includes("quizizz.com"))) &&
-      options &&
-      options.method === "POST" &&
-      options.body
-    ) {
+    const isProceedUrl = urlString.includes("play-api") && /proceedGame|soloProceed/.test(urlString);
+    if (isProceedUrl && isWaygroundQuizizz && options?.method === "POST" && options.body) {
       try {
-        let requestData = JSON.parse(options.body);
-
-        requestData = processProceedGameRequest(requestData);
-
-        const modifiedOptions = {
-          ...options,
-          body: JSON.stringify(requestData),
-        };
-
-        return originalFetch.call(this, url, modifiedOptions);
+        return originalFetch.call(this, url, { ...options, body: JSON.stringify(processProceedGameRequest(JSON.parse(options.body))) });
       } catch (e) {
         GM_log("[!] Failed to parse/modify proceedGame fetch request:", e);
       }
     }
 
     // Intercept requests to reaction-update via fetch
-    if (
-      typeof url === "string" &&
-      (url.includes("wayground.com") || url.includes("quizizz.com")) &&
-      url.includes("_gameapi/main/public/v1/games/") &&
-      url.includes("/reaction-update") &&
-      options &&
-      options.method === "POST" &&
-      options.body &&
-      sharedState.config.enableReactionSpam
-    ) {
-      // Send original request
+    const isReactionUpdate = isWaygroundQuizizz && urlString.includes("_gameapi/main/public/v1/games/") && urlString.includes("/reaction-update");
+    if (isReactionUpdate && options?.method === "POST" && options.body && sharedState.config.enableReactionSpam) {
       const result = originalFetch.call(this, url, options);
-      // Resend based on config
       for (let i = 1; i <= sharedState.config.reactionSpamCount; i++) {
-        setTimeout(() => {
-          originalFetch.call(this, url, options);
-        }, sharedState.config.reactionSpamDelay * i);
+        setTimeout(() => originalFetch.call(this, url, options), sharedState.config.reactionSpamDelay * i);
       }
       return result;
     }
 
-    if (
-      typeof url === "string" &&
-      (((url.includes("play-api") &&
-        (url.includes("soloJoin") || url.includes("rejoinGame") || url.includes("join"))) || (url.includes("_quizserver/main/v2/quiz"))) &&
-        (url.includes("wayground.com") || url.includes("quizizz.com")))
-    ) {
-      return originalFetch.call(this, url, options).then((response) => {
-        if (response.ok) {
-          return response
-            .clone()
-            .json()
-            .then((data) => {
-              processQuizData(data);
-              return response;
-            })
-            .catch(() => response);
-        }
+    const isQuizJoinUrl = (urlString.includes("play-api") && /soloJoin|rejoinGame|join/.test(urlString)) || urlString.includes("_quizserver/main/v2/quiz");
+    if (isQuizJoinUrl && isWaygroundQuizizz) {
+      return originalFetch.call(this, url, options).then(response => {
+        if (response.ok) return response.clone().json().then(data => { processQuizData(data); return response; }).catch(() => response);
         return response;
       });
     }
 
-    if (
-      typeof url === "string" &&
-      (url.includes("play-api") &&
-        (url.includes("proceedGame") || url.includes("soloProceed")) &&
-        (url.includes("wayground.com") || url.includes("quizizz.com")))
-    ) {
-      return originalFetch.call(this, url, options).then((response) => {
-        if (response.ok) {
-          return response
-            .clone()
-            .json()
-            .then((data) => {
-              processProceedGameResponse(data);
-              return response;
-            })
-            .catch(() => response);
-        }
+    if (isProceedUrl && isWaygroundQuizizz) {
+      return originalFetch.call(this, url, options).then(response => {
+        if (response.ok) return response.clone().json().then(data => { processProceedGameResponse(data); return response; }).catch(() => response);
         return response;
       });
     }
