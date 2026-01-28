@@ -11,3 +11,4 @@ __pycache__
 include
 jquery.*
 uets-server/quiz_data.db
+data

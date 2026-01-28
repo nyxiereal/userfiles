@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.4.5
+// @version      1.5.0
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -40,7 +40,10 @@
     timerBonusPoints: 270,
     enableSpoofFullscreen: true,
     serverUrl: "https://uets.meowery.eu",
+    aiProvider: "gemini", // "gemini" or "openrouter"
     geminiApiKey: "",
+    openrouterApiKey: "",
+    openrouterModel: "x-ai/grok-4.1-fast",
     thinkingBudget: 512,
     maxOutputTokens: 1024,
     temperature: 0.2,
@@ -240,12 +243,24 @@
             );
           }
         }
-        askGemini(
-          questionText || "(See attached image)",
-          options,
-          imageData,
-          platform,
-        );
+
+        // Route to the appropriate AI provider
+        const provider = sharedState.config.aiProvider || 'gemini';
+        if (provider === 'openrouter') {
+          askOpenRouter(
+            questionText || "(See attached image)",
+            options,
+            imageData,
+            platform,
+          );
+        } else {
+          askGemini(
+            questionText || "(See attached image)",
+            options,
+            imageData,
+            platform,
+          );
+        }
       },
     );
     geminiButton.type = "button"; // Explicitly set button type
@@ -345,7 +360,7 @@
     });
 
     // Override window.focus to do nothing
-    window.focus = () => {};
+    window.focus = () => { };
 
     // Spoof visibility state
     Object.defineProperty(document, "visibilityState", {
@@ -524,6 +539,7 @@
   const saveConfig = () => {
     GM_setValue(CONFIG_STORAGE_KEY, sharedState.config);
     GM_setValue(GEMINI_API_KEY_STORAGE, sharedState.config.geminiApiKey);
+    // OpenRouter API key is stored in the main config, no separate storage needed
   };
 
   const resetConfig = () => {
@@ -662,13 +678,16 @@
 
     <div class="uets-card" style="margin-top: 6px; margin-left: 4px; margin-right: 4px;">
       <div class="uets-config-section">
-        <div class="uets-config-section-title">Gemini AI Settings</div>
+        <div class="uets-config-section-title">AI Settings</div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Your Gemini API key for AI assistance. You can get it on https://aistudio.google.com/apikey." title="Info"></button>
-            <label class="uets-config-label">API Key</label>
+            <button class="uets-config-info" data-info="Choose between Gemini or OpenRouter as your AI provider." title="Info"></button>
+            <label class="uets-config-label">AI Provider</label>
           </div>
-          <input type="password" class="uets-config-input" id="geminiApiKey" style="width: 200px;">
+          <select class="uets-config-input" id="aiProvider" style="width: 200px;">
+            <option value="gemini">Gemini</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
@@ -680,40 +699,88 @@
             <span class="uets-switch-slider"></span>
           </label>
         </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Budget for thinking in the AI model (0 disables thinking). Can increase output response quality, but increases the waiting time for the answer. I recommend 256 or 512 tokens." title="Info"></button>
-            <label class="uets-config-label">Thinking budget</label>
+        <div class="uets-config-subsection" id="geminiSettings">
+          <div class="uets-config-section-title" style="font-size: 14px; margin-top: 8px;">Gemini Settings</div>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Your Gemini API key for AI assistance. You can get it on https://aistudio.google.com/apikey." title="Info"></button>
+              <label class="uets-config-label">API Key</label>
+            </div>
+            <input type="password" class="uets-config-input" id="geminiApiKey" style="width: 200px;">
           </div>
-          <input type="number" class="uets-config-input" id="thinkingBudget" min="512" max="4096">
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Budget for thinking in the AI model (0 disables thinking). Can increase output response quality, but increases the waiting time for the answer. I recommend 256 or 512 tokens." title="Info"></button>
+              <label class="uets-config-label">Thinking budget</label>
+            </div>
+            <input type="number" class="uets-config-input" id="thinkingBudget" min="512" max="4096">
+          </div>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Maximum number of tokens in AI responses (1-8192). A token is roughly equal to a word, or a punctuation mark." title="Info"></button>
+              <label class="uets-config-label">Max output tokens</label>
+            </div>
+            <input type="number" class="uets-config-input" id="maxOutputTokens" min="1" max="8192">
+          </div>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Controls randomness (or creativity) in AI responses (0-2). Lower values will be coherant and predictable, while larger values will be more creating. A value between 0.2 and 0.5 is recommended." title="Info"></button>
+              <label class="uets-config-label">Temperature</label>
+            </div>
+            <input type="number" class="uets-config-input" id="temperature" min="0" max="2" step="0.1">
+          </div>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Computes the cumulative probability distribution, and cut off as soon as that distribution exceeds the value of topP. Basically how many words can be computed and considered. I recommend a value between 0.90 and 1.00 for a better quality output." title="Info"></button>
+              <label class="uets-config-label">Top P</label>
+            </div>
+            <input type="number" class="uets-config-input" id="topP" min="0" max="1" step="0.05">
+          </div>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Helps balance creativity and coherence in generated text by introducing controlled randomness while avoiding less likely or nonsensical words. Basically avoids obscure words, I recommend a value between 40 and 64." title="Info"></button>
+              <label class="uets-config-label">Top K</label>
+            </div>
+            <input type="number" class="uets-config-input" id="topK" min="1" max="100">
+          </div>
         </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Maximum number of tokens in AI responses (1-8192). A token is roughly equal to a word, or a punctuation mark." title="Info"></button>
-            <label class="uets-config-label">Max output tokens</label>
+        <div class="uets-config-subsection" id="openrouterSettings" style="display: none;">
+          <div class="uets-config-section-title" style="font-size: 14px; margin-top: 8px;">OpenRouter Settings</div>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Your OpenRouter API key for AI assistance. You can get it on https://openrouter.ai/keys." title="Info"></button>
+              <label class="uets-config-label">API Key</label>
+            </div>
+            <input type="password" class="uets-config-input" id="openrouterApiKey" style="width: 200px;">
           </div>
-          <input type="number" class="uets-config-input" id="maxOutputTokens" min="1" max="8192">
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Controls randomness (or creativity) in AI responses (0-2). Lower values will be coherant and predictable, while larger values will be more creating. A value between 0.2 and 0.5 is recommended." title="Info"></button>
-            <label class="uets-config-label">Temperature</label>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="The OpenRouter model to use. Popular options: anthropic/claude-3.5-sonnet, openai/gpt-4-turbo, google/gemini-pro-1.5." title="Info"></button>
+              <label class="uets-config-label">Model</label>
+            </div>
+            <input type="text" class="uets-config-input" id="openrouterModel" style="width: 200px;">
           </div>
-          <input type="number" class="uets-config-input" id="temperature" min="0" max="2" step="0.1">
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Computes the cumulative probability distribution, and cut off as soon as that distribution exceeds the value of topP. Basically how many words can be computed and considered. I recommend a value between 0.90 and 1.00 for a better quality output." title="Info"></button>
-            <label class="uets-config-label">Top P</label>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Maximum number of tokens in AI responses (1-8192). A token is roughly equal to a word, or a punctuation mark." title="Info"></button>
+              <label class="uets-config-label">Max output tokens</label>
+            </div>
+            <input type="number" class="uets-config-input" id="openrouterMaxTokens" min="1" max="8192">
           </div>
-          <input type="number" class="uets-config-input" id="topP" min="0" max="1" step="0.05">
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Helps balance creativity and coherence in generated text by introducing controlled randomness while avoiding less likely or nonsensical words. Basically avoids obscure words, I recommend a value between 40 and 64." title="Info"></button>
-            <label class="uets-config-label">Top K</label>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Controls randomness (or creativity) in AI responses (0-2). Lower values will be coherant and predictable, while larger values will be more creating. A value between 0.2 and 0.5 is recommended." title="Info"></button>
+              <label class="uets-config-label">Temperature</label>
+            </div>
+            <input type="number" class="uets-config-input" id="openrouterTemperature" min="0" max="2" step="0.1">
           </div>
-          <input type="number" class="uets-config-input" id="topK" min="1" max="100">
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Computes the cumulative probability distribution, and cut off as soon as that distribution exceeds the value of topP. Basically how many words can be computed and considered. I recommend a value between 0.90 and 1.00 for a better quality output." title="Info"></button>
+              <label class="uets-config-label">Top P</label>
+            </div>
+            <input type="number" class="uets-config-input" id="openrouterTopP" min="0" max="1" step="0.05">
+          </div>
         </div>
       </div>
     </div>
@@ -736,13 +803,19 @@
       document.getElementById('enableSpoofFullscreen').checked = sharedState.config.enableSpoofFullscreen;
       document.getElementById('enableSiteOptimizations').checked = sharedState.config.enableSiteOptimizations;
       document.getElementById('serverUrl').value = sharedState.config.serverUrl;
+      document.getElementById('aiProvider').value = sharedState.config.aiProvider || 'gemini';
       document.getElementById('geminiApiKey').value = sharedState.config.geminiApiKey;
+      document.getElementById('openrouterApiKey').value = sharedState.config.openrouterApiKey || '';
+      document.getElementById('openrouterModel').value = sharedState.config.openrouterModel || 'anthropic/claude-3.5-sonnet';
       document.getElementById('includeImages').checked = sharedState.config.includeImages;
       document.getElementById('thinkingBudget').value = sharedState.config.thinkingBudget;
       document.getElementById('maxOutputTokens').value = sharedState.config.maxOutputTokens;
       document.getElementById('temperature').value = sharedState.config.temperature;
       document.getElementById('topP').value = sharedState.config.topP;
       document.getElementById('topK').value = sharedState.config.topK;
+      document.getElementById('openrouterMaxTokens').value = sharedState.config.maxOutputTokens;
+      document.getElementById('openrouterTemperature').value = sharedState.config.temperature;
+      document.getElementById('openrouterTopP').value = sharedState.config.topP;
       document.getElementById('enableReactionSpam').checked = sharedState.config.enableReactionSpam;
       document.getElementById('reactionSpamCount').value = sharedState.config.reactionSpamCount;
       document.getElementById('reactionSpamDelay').value = sharedState.config.reactionSpamDelay;
@@ -751,11 +824,34 @@
       profileButtons.forEach(btn => btn.classList.remove('active'));
       const customBtn = gui.querySelector('.uets-profile-button[data-profile="Custom"]');
       if (customBtn) customBtn.classList.add('active');
+      // Toggle provider settings visibility
+      toggleProviderSettings();
+    };
+
+    // Toggle provider settings visibility
+    const toggleProviderSettings = () => {
+      const provider = document.getElementById('aiProvider').value;
+      const geminiSettings = document.getElementById('geminiSettings');
+      const openrouterSettings = document.getElementById('openrouterSettings');
+
+      if (provider === 'gemini') {
+        geminiSettings.style.display = 'block';
+        openrouterSettings.style.display = 'none';
+      } else {
+        geminiSettings.style.display = 'none';
+        openrouterSettings.style.display = 'block';
+      }
     };
 
     // Event handlers
     gui.querySelector('.uets-config-close').onclick = () => closeConfigGui();
     gui.querySelector('.uets-config-cancel').onclick = () => closeConfigGui();
+
+    // AI Provider change handler
+    const aiProviderSelect = gui.querySelector('#aiProvider');
+    if (aiProviderSelect) {
+      aiProviderSelect.addEventListener('change', toggleProviderSettings);
+    }
 
     gui.querySelector('.uets-config-save').onclick = () => {
       // Collect values
@@ -767,13 +863,26 @@
       sharedState.config.enableSpoofFullscreen = document.getElementById('enableSpoofFullscreen').checked;
       sharedState.config.enableSiteOptimizations = document.getElementById('enableSiteOptimizations').checked;
       sharedState.config.serverUrl = document.getElementById('serverUrl').value;
+      sharedState.config.aiProvider = document.getElementById('aiProvider').value;
       sharedState.config.geminiApiKey = document.getElementById('geminiApiKey').value;
+      sharedState.config.openrouterApiKey = document.getElementById('openrouterApiKey').value;
+      sharedState.config.openrouterModel = document.getElementById('openrouterModel').value;
       sharedState.config.includeImages = document.getElementById('includeImages').checked;
       sharedState.config.thinkingBudget = parseInt(document.getElementById('thinkingBudget').value);
-      sharedState.config.maxOutputTokens = parseInt(document.getElementById('maxOutputTokens').value);
-      sharedState.config.temperature = parseFloat(document.getElementById('temperature').value);
-      sharedState.config.topP = parseFloat(document.getElementById('topP').value);
-      sharedState.config.topK = parseInt(document.getElementById('topK').value);
+
+      // Use provider-specific values
+      const provider = document.getElementById('aiProvider').value;
+      if (provider === 'gemini') {
+        sharedState.config.maxOutputTokens = parseInt(document.getElementById('maxOutputTokens').value);
+        sharedState.config.temperature = parseFloat(document.getElementById('temperature').value);
+        sharedState.config.topP = parseFloat(document.getElementById('topP').value);
+        sharedState.config.topK = parseInt(document.getElementById('topK').value);
+      } else {
+        sharedState.config.maxOutputTokens = parseInt(document.getElementById('openrouterMaxTokens').value);
+        sharedState.config.temperature = parseFloat(document.getElementById('openrouterTemperature').value);
+        sharedState.config.topP = parseFloat(document.getElementById('openrouterTopP').value);
+      }
+
       sharedState.config.enableReactionSpam = document.getElementById('enableReactionSpam').checked;
       sharedState.config.reactionSpamCount = parseInt(document.getElementById('reactionSpamCount').value);
       sharedState.config.reactionSpamDelay = parseInt(document.getElementById('reactionSpamDelay').value);
@@ -846,20 +955,39 @@
   });
 
   const getApiKey = async () => {
-    let apiKey = sharedState.config.geminiApiKey || GM_getValue(GEMINI_API_KEY_STORAGE, null);
-    if (!apiKey || apiKey.trim() === "") {
-      apiKey = prompt("Gemini API Key not set. Please enter your API Key:");
-      if (apiKey && apiKey.trim() !== "") {
-        sharedState.config.geminiApiKey = apiKey.trim();
-        GM_setValue(GEMINI_API_KEY_STORAGE, apiKey.trim());
-        saveConfig();
-        return apiKey.trim();
-      } else {
-        alert("Gemini API Key is required. Set it via the configuration or Tampermonkey menu.");
-        return null;
+    const provider = sharedState.config.aiProvider || 'gemini';
+
+    if (provider === 'gemini') {
+      let apiKey = sharedState.config.geminiApiKey || GM_getValue(GEMINI_API_KEY_STORAGE, null);
+      if (!apiKey || apiKey.trim() === "") {
+        apiKey = prompt("Gemini API Key not set. Please enter your API Key:");
+        if (apiKey && apiKey.trim() !== "") {
+          sharedState.config.geminiApiKey = apiKey.trim();
+          GM_setValue(GEMINI_API_KEY_STORAGE, apiKey.trim());
+          saveConfig();
+          return apiKey.trim();
+        } else {
+          alert("Gemini API Key is required. Set it via the configuration or Tampermonkey menu.");
+          return null;
+        }
       }
+      return apiKey.trim();
+    } else {
+      // OpenRouter
+      let apiKey = sharedState.config.openrouterApiKey;
+      if (!apiKey || apiKey.trim() === "") {
+        apiKey = prompt("OpenRouter API Key not set. Please enter your API Key:");
+        if (apiKey && apiKey.trim() !== "") {
+          sharedState.config.openrouterApiKey = apiKey.trim();
+          saveConfig();
+          return apiKey.trim();
+        } else {
+          alert("OpenRouter API Key is required. Set it via the configuration.");
+          return null;
+        }
+      }
+      return apiKey.trim();
     }
-    return apiKey.trim();
   };
 
   // === SHARED IMAGE FETCHING ===
@@ -1031,6 +1159,109 @@ Please perform the following:
       ontimeout: () =>
         showResponsePopup(
           "Gemini API Error: Request timed out.",
+          false,
+          "AI Assistant",
+        ),
+    });
+  };
+
+  const askOpenRouter = async (question, options, imageData, platform = "quiz") => {
+    const apiKey = sharedState.config.openrouterApiKey;
+    if (!apiKey || apiKey.trim() === "") {
+      alert("OpenRouter API Key is required. Please set it in the configuration.");
+      return;
+    }
+
+    const promptText = buildGeminiPrompt(
+      question,
+      options,
+      !!imageData,
+      platform,
+    );
+    const apiUrl = "https://openrouter.ai/api/v1/chat/completions";
+
+    const messages = [
+      {
+        role: "user",
+        content: []
+      }
+    ];
+
+    // Add text content
+    messages[0].content.push({
+      type: "text",
+      text: promptText
+    });
+
+    // Add image if available
+    if (sharedState.config.includeImages && imageData && imageData.base64Data && imageData.mimeType) {
+      messages[0].content.push({
+        type: "image_url",
+        image_url: {
+          url: `data:${imageData.mimeType};base64,${imageData.base64Data}`
+        }
+      });
+    }
+
+    const apiPayload = {
+      model: sharedState.config.openrouterModel || "anthropic/claude-3.5-sonnet",
+      messages: messages,
+      temperature: sharedState.config.temperature,
+      top_p: sharedState.config.topP,
+      max_tokens: sharedState.config.maxOutputTokens,
+    };
+
+    showResponsePopup("Loading AI insights...", true, "AI Assistant");
+
+    GM_xmlhttpRequest({
+      method: "POST",
+      url: apiUrl,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+        "HTTP-Referer": window.location.href,
+        "X-Title": "UETS - Universal Educational Tool Suite"
+      },
+      data: JSON.stringify(apiPayload),
+      onload: (response) => {
+        try {
+          const result = JSON.parse(response.responseText);
+          if (result.choices && result.choices.length > 0 && result.choices[0].message) {
+            const aiText = result.choices[0].message.content;
+            GM_log("[+] OpenRouter API Response:", aiText);
+            showResponsePopup(aiText, false, "AI Assistant");
+          } else if (result.error) {
+            GM_log("[!] OpenRouter API Error:", result.error.message || result.error);
+            showResponsePopup(
+              `OpenRouter API Error: ${result.error.message || result.error}`,
+              false,
+              "AI Assistant",
+            );
+          } else {
+            showResponsePopup(
+              "OpenRouter API Error: Could not parse a valid response.",
+              false,
+              "AI Assistant",
+            );
+          }
+        } catch (e) {
+          showResponsePopup(
+            "OpenRouter API Error: Failed to parse response.\n" + e.message,
+            false,
+            "AI Assistant",
+          );
+        }
+      },
+      onerror: (response) => {
+        showResponsePopup(
+          `OpenRouter API Error: Request failed. Status: ${response.status}`,
+          false,
+          "AI Assistant",
+        );
+      },
+      ontimeout: () =>
+        showResponsePopup(
+          "OpenRouter API Error: Request timed out.",
           false,
           "AI Assistant",
         ),
