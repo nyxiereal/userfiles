@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.5.0
+// @version      1.6.0
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -42,9 +42,13 @@
     serverUrl: "https://uets.meowery.eu",
     aiProvider: "gemini", // "gemini" or "openrouter"
     geminiApiKey: "",
+    geminiModel: "gemini-flash-lite-latest",
+    geminiThinkingBudget: 512,
     openrouterApiKey: "",
     openrouterModel: "x-ai/grok-4.1-fast",
-    thinkingBudget: 512,
+    openrouterMaxTokens: 2048,
+    openrouterReasoningMaxTokens: 2000,
+    openrouterReasoningEffort: "medium",
     maxOutputTokens: 1024,
     temperature: 0.2,
     topP: 0.95,
@@ -55,6 +59,13 @@
     reactionSpamDelay: 2000,
     enableSiteOptimizations: false
   };
+
+
+  // Models that use effort-based reasoning
+  const OPENROUTER_EFFORT_MODELS = new Set([
+    'openai/gpt-5-nano',
+    'x-ai/grok-4.1-fast'
+  ]);
 
 
   const PROFILES = {
@@ -418,7 +429,7 @@
     postToServer("/api/answer", { questionId, correctAnswers, answerType });
 
   // === ANSWER HIGHLIGHTING ===
-  const highlightCorrectAnswers = (correctAnswers, questionType) => {
+  const highlightCorrectAnswers = (correctAnswers, questionType, showModal = true, useDataCy = true) => {
     if (!sharedState.uiModificationsEnabled) return;
 
     const optionButtons = document.querySelectorAll("button.option");
@@ -428,7 +439,9 @@
     });
 
     const currentQuestion = sharedState.questionsPool[sharedState.currentQuestionId];
-    showCorrectAnswersModal(correctAnswers, questionType, currentQuestion);
+    if (showModal) {
+      showCorrectAnswersModal(correctAnswers, questionType, currentQuestion);
+    }
 
     if (questionType === "BLANK" || !currentQuestion) return;
 
@@ -438,7 +451,7 @@
       // Try to get option index from data-cy attribute (format: "option-X")
       const dataCy = button.getAttribute("data-cy");
       let optionIndex = buttonIndex;
-      if (dataCy && dataCy.startsWith("option-")) {
+      if (useDataCy && dataCy && dataCy.startsWith("option-")) {
         const parsedIndex = parseInt(dataCy.replace("option-", ""), 10);
         if (!isNaN(parsedIndex)) {
           optionIndex = parsedIndex;
@@ -710,10 +723,22 @@
           </div>
           <div class="uets-config-item">
             <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Budget for thinking in the AI model (0 disables thinking). Can increase output response quality, but increases the waiting time for the answer. I recommend 256 or 512 tokens." title="Info"></button>
+              <button class="uets-config-info" data-info="The Gemini model to use." title="Info"></button>
+              <label class="uets-config-label">Model</label>
+            </div>
+            <select class="uets-config-select" id="geminiModel" style="width: 200px;">
+              <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
+              <option value="gemini-flash-latest">gemini-flash-latest</option>
+              <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+              <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+            </select>
+          </div>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Budget for thinking in the AI model (min 512 tokens). Can increase output response quality, but increases the waiting time for the answer. I recommend 512 or 1024 tokens." title="Info"></button>
               <label class="uets-config-label">Thinking budget</label>
             </div>
-            <input type="number" class="uets-config-input" id="thinkingBudget" min="512" max="4096">
+            <input type="number" class="uets-config-input" id="geminiThinkingBudget" min="512" max="8192">
           </div>
           <div class="uets-config-item">
             <div class="uets-config-label-container">
@@ -755,31 +780,59 @@
           </div>
           <div class="uets-config-item">
             <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="The OpenRouter model to use. Popular options: anthropic/claude-3.5-sonnet, openai/gpt-4-turbo, google/gemini-pro-1.5." title="Info"></button>
+              <button class="uets-config-info" data-info="The OpenRouter model to use. Different models have different capabilities and costs." title="Info"></button>
               <label class="uets-config-label">Model</label>
             </div>
-            <input type="text" class="uets-config-input" id="openrouterModel" style="width: 200px;">
+            <select class="uets-config-select" id="openrouterModel" style="width: 200px;">
+              <option value="google/gemini-2.5-flash-lite">google/gemini-2.5-flash-lite</option>
+              <option value="openai/gpt-5-nano">openai/gpt-5-nano</option>
+              <option value="x-ai/grok-4.1-fast">x-ai/grok-4.1-fast</option>
+              <option value="google/gemini-3-flash-preview">google/gemini-3-flash-preview</option>
+              <option value="bytedance-seed/seed-1.6-flash">bytedance-seed/seed-1.6-flash</option>
+              <option value="moonshotai/kimi-k2.5">moonshotai/kimi-k2.5</option>
+            </select>
           </div>
           <div class="uets-config-item">
             <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Maximum number of tokens in AI responses (1-8192). A token is roughly equal to a word, or a punctuation mark." title="Info"></button>
+              <button class="uets-config-info" data-info="Maximum number of tokens in AI responses (256-8192). A token is roughly equal to a word." title="Info"></button>
               <label class="uets-config-label">Max output tokens</label>
             </div>
-            <input type="number" class="uets-config-input" id="openrouterMaxTokens" min="1" max="8192">
+            <input type="number" class="uets-config-input" id="openrouterMaxTokens" min="256" max="8192">
           </div>
           <div class="uets-config-item">
             <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Controls randomness (or creativity) in AI responses (0-2). Lower values will be coherant and predictable, while larger values will be more creating. A value between 0.2 and 0.5 is recommended." title="Info"></button>
+              <button class="uets-config-info" data-info="Controls randomness (0-2). Lower values are more focused and deterministic. Recommended: 0.2-0.5." title="Info"></button>
               <label class="uets-config-label">Temperature</label>
             </div>
             <input type="number" class="uets-config-input" id="openrouterTemperature" min="0" max="2" step="0.1">
           </div>
           <div class="uets-config-item">
             <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Computes the cumulative probability distribution, and cut off as soon as that distribution exceeds the value of topP. Basically how many words can be computed and considered. I recommend a value between 0.90 and 1.00 for a better quality output." title="Info"></button>
+              <button class="uets-config-info" data-info="Nucleus sampling parameter (0-1). Controls diversity of output. Recommended: 0.90-1.00." title="Info"></button>
               <label class="uets-config-label">Top P</label>
             </div>
             <input type="number" class="uets-config-input" id="openrouterTopP" min="0" max="1" step="0.05">
+          </div>
+          <div class="uets-config-item" id="openrouterReasoningTokensItem">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Max reasoning tokens (256-8192) for models that support extended reasoning. Used by most models." title="Info"></button>
+              <label class="uets-config-label">Reasoning max tokens</label>
+            </div>
+            <input type="number" class="uets-config-input" id="openrouterReasoningMaxTokens" min="256" max="8192">
+          </div>
+          <div class="uets-config-item" id="openrouterReasoningEffortItem" style="display: none;">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Reasoning effort level for certain models (GPT-5 Nano, Grok). Higher effort = better quality but slower." title="Info"></button>
+              <label class="uets-config-label">Reasoning effort</label>
+            </div>
+            <select class="uets-config-select" id="openrouterReasoningEffort" style="width: 200px;">
+              <option value="none">None</option>
+              <option value="minimal">Minimal</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="xhigh">Extra High</option>
+            </select>
           </div>
         </div>
       </div>
@@ -804,28 +857,42 @@
       document.getElementById('enableSiteOptimizations').checked = sharedState.config.enableSiteOptimizations;
       document.getElementById('serverUrl').value = sharedState.config.serverUrl;
       document.getElementById('aiProvider').value = sharedState.config.aiProvider || 'gemini';
-      document.getElementById('geminiApiKey').value = sharedState.config.geminiApiKey;
+
+      // Gemini settings
+      document.getElementById('geminiApiKey').value = sharedState.config.geminiApiKey || '';
+      document.getElementById('geminiModel').value = sharedState.config.geminiModel || 'gemini-flash-lite-latest';
+      document.getElementById('geminiThinkingBudget').value = sharedState.config.geminiThinkingBudget || 512;
+
+      // OpenRouter settings
       document.getElementById('openrouterApiKey').value = sharedState.config.openrouterApiKey || '';
-      document.getElementById('openrouterModel').value = sharedState.config.openrouterModel || 'anthropic/claude-3.5-sonnet';
+      document.getElementById('openrouterModel').value = sharedState.config.openrouterModel || 'x-ai/grok-4.1-fast';
+      document.getElementById('openrouterMaxTokens').value = sharedState.config.openrouterMaxTokens || 2048;
+      document.getElementById('openrouterReasoningMaxTokens').value = sharedState.config.openrouterReasoningMaxTokens || 2000;
+      document.getElementById('openrouterReasoningEffort').value = sharedState.config.openrouterReasoningEffort || 'medium';
+
+      // Shared AI settings
       document.getElementById('includeImages').checked = sharedState.config.includeImages;
-      document.getElementById('thinkingBudget').value = sharedState.config.thinkingBudget;
       document.getElementById('maxOutputTokens').value = sharedState.config.maxOutputTokens;
       document.getElementById('temperature').value = sharedState.config.temperature;
       document.getElementById('topP').value = sharedState.config.topP;
       document.getElementById('topK').value = sharedState.config.topK;
-      document.getElementById('openrouterMaxTokens').value = sharedState.config.maxOutputTokens;
       document.getElementById('openrouterTemperature').value = sharedState.config.temperature;
       document.getElementById('openrouterTopP').value = sharedState.config.topP;
+
+      // Reaction spam settings
       document.getElementById('enableReactionSpam').checked = sharedState.config.enableReactionSpam;
       document.getElementById('reactionSpamCount').value = sharedState.config.reactionSpamCount;
       document.getElementById('reactionSpamDelay').value = sharedState.config.reactionSpamDelay;
+
       // Set active profile button
       const profileButtons = gui.querySelectorAll('.uets-profile-button');
       profileButtons.forEach(btn => btn.classList.remove('active'));
       const customBtn = gui.querySelector('.uets-profile-button[data-profile="Custom"]');
       if (customBtn) customBtn.classList.add('active');
+
       // Toggle provider settings visibility
       toggleProviderSettings();
+      toggleOpenRouterReasoningSettings();
     };
 
     // Toggle provider settings visibility
@@ -843,6 +910,21 @@
       }
     };
 
+    // Toggle OpenRouter reasoning settings based on model
+    const toggleOpenRouterReasoningSettings = () => {
+      const model = document.getElementById('openrouterModel')?.value;
+      const effortItem = document.getElementById('openrouterReasoningEffortItem');
+      const tokensItem = document.getElementById('openrouterReasoningTokensItem');
+
+      if (model && OPENROUTER_EFFORT_MODELS.has(model)) {
+        effortItem.style.display = 'flex';
+        tokensItem.style.display = 'none';
+      } else {
+        effortItem.style.display = 'none';
+        tokensItem.style.display = 'flex';
+      }
+    };
+
     // Event handlers
     gui.querySelector('.uets-config-close').onclick = () => closeConfigGui();
     gui.querySelector('.uets-config-cancel').onclick = () => closeConfigGui();
@@ -851,6 +933,12 @@
     const aiProviderSelect = gui.querySelector('#aiProvider');
     if (aiProviderSelect) {
       aiProviderSelect.addEventListener('change', toggleProviderSettings);
+    }
+
+    // OpenRouter model change handler
+    const openrouterModelSelect = gui.querySelector('#openrouterModel');
+    if (openrouterModelSelect) {
+      openrouterModelSelect.addEventListener('change', toggleOpenRouterReasoningSettings);
     }
 
     gui.querySelector('.uets-config-save').onclick = () => {
@@ -864,11 +952,21 @@
       sharedState.config.enableSiteOptimizations = document.getElementById('enableSiteOptimizations').checked;
       sharedState.config.serverUrl = document.getElementById('serverUrl').value;
       sharedState.config.aiProvider = document.getElementById('aiProvider').value;
+
+      // Gemini settings
       sharedState.config.geminiApiKey = document.getElementById('geminiApiKey').value;
+      sharedState.config.geminiModel = document.getElementById('geminiModel').value;
+      sharedState.config.geminiThinkingBudget = parseInt(document.getElementById('geminiThinkingBudget').value);
+
+      // OpenRouter settings
       sharedState.config.openrouterApiKey = document.getElementById('openrouterApiKey').value;
       sharedState.config.openrouterModel = document.getElementById('openrouterModel').value;
+      sharedState.config.openrouterMaxTokens = parseInt(document.getElementById('openrouterMaxTokens').value);
+      sharedState.config.openrouterReasoningMaxTokens = parseInt(document.getElementById('openrouterReasoningMaxTokens').value);
+      sharedState.config.openrouterReasoningEffort = document.getElementById('openrouterReasoningEffort').value;
+
+      // Shared AI settings
       sharedState.config.includeImages = document.getElementById('includeImages').checked;
-      sharedState.config.thinkingBudget = parseInt(document.getElementById('thinkingBudget').value);
 
       // Use provider-specific values
       const provider = document.getElementById('aiProvider').value;
@@ -1051,6 +1149,7 @@ Please perform the following:
 1. Identify the correct answer or answers from the "Available Options" list.
 2. Provide a concise reasoning for your choice(s).
 3. Format your response clearly. Start with "Correct Answer(s):" followed by the answer(s), and then "Reasoning:" followed by your explanation. Be brief and to the point.
+Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
 `;
   };
 
@@ -1064,7 +1163,8 @@ Please perform the following:
       !!imageData,
       platform,
     );
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${apiKey}`;
+    const model = sharedState.config.geminiModel || 'gemini-flash-lite-latest';
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const requestPayloadContents = [{ parts: [{ text: promptText }] }];
     if (sharedState.config.includeImages && imageData && imageData.base64Data && imageData.mimeType) {
@@ -1084,7 +1184,7 @@ Please perform the following:
         topK: sharedState.config.topK,
         maxOutputTokens: sharedState.config.maxOutputTokens,
         thinkingConfig: {
-          thinkingBudget: sharedState.config.thinkingBudget,
+          thinkingBudget: sharedState.config.geminiThinkingBudget || 512,
         },
       },
       safetySettings: [
@@ -1127,6 +1227,23 @@ Please perform the following:
             const geminiText = result.candidates[0].content.parts[0].text;
             GM_log("[+] Gemini API Response:", geminiText);
             showResponsePopup(geminiText, false, "AI Assistant");
+
+            // Try to parse and highlight answers automatically
+            if (options && options.length > 0) {
+              const parsedAnswers = parseAiResponseForAnswers(geminiText, options);
+              if (parsedAnswers && parsedAnswers.length > 0) {
+                GM_log(`[+] Auto-highlighting answers: ${parsedAnswers.join(', ')}`);
+                const questionType = parsedAnswers.length > 1 ? 'MSQ' : 'MCQ';
+                setTimeout(() => {
+                  highlightCorrectAnswers(
+                    parsedAnswers.length > 1 ? parsedAnswers : parsedAnswers[0],
+                    questionType,
+                    false,
+                    false,
+                  );
+                }, 300);
+              }
+            }
           } else if (result.error) {
             GM_log("[!] Gemini API Error:", result.error.message);
             showResponsePopup(
@@ -1179,6 +1296,7 @@ Please perform the following:
       platform,
     );
     const apiUrl = "https://openrouter.ai/api/v1/chat/completions";
+    const model = sharedState.config.openrouterModel || "x-ai/grok-4.1-fast";
 
     const messages = [
       {
@@ -1203,12 +1321,19 @@ Please perform the following:
       });
     }
 
+    // Build reasoning config based on model
+    const usesEffort = OPENROUTER_EFFORT_MODELS.has(model);
+    const reasoningConfig = usesEffort
+      ? { effort: sharedState.config.openrouterReasoningEffort || 'medium' }
+      : { max_tokens: sharedState.config.openrouterReasoningMaxTokens || 2000 };
+
     const apiPayload = {
-      model: sharedState.config.openrouterModel || "anthropic/claude-3.5-sonnet",
+      model: model,
       messages: messages,
       temperature: sharedState.config.temperature,
       top_p: sharedState.config.topP,
-      max_tokens: sharedState.config.maxOutputTokens,
+      max_tokens: sharedState.config.openrouterMaxTokens || 2048,
+      reasoning: reasoningConfig
     };
 
     showResponsePopup("Loading AI insights...", true, "AI Assistant");
@@ -1230,6 +1355,23 @@ Please perform the following:
             const aiText = result.choices[0].message.content;
             GM_log("[+] OpenRouter API Response:", aiText);
             showResponsePopup(aiText, false, "AI Assistant");
+
+            // Try to parse and highlight answers automatically
+            if (options && options.length > 0) {
+              const parsedAnswers = parseAiResponseForAnswers(aiText, options);
+              if (parsedAnswers && parsedAnswers.length > 0) {
+                GM_log(`[+] Auto-highlighting answers: ${parsedAnswers.join(', ')}`);
+                const questionType = parsedAnswers.length > 1 ? 'MSQ' : 'MCQ';
+                setTimeout(() => {
+                  highlightCorrectAnswers(
+                    parsedAnswers.length > 1 ? parsedAnswers : parsedAnswers[0],
+                    questionType,
+                    false,
+                    false,
+                  );
+                }, 300);
+              }
+            }
           } else if (result.error) {
             GM_log("[!] OpenRouter API Error:", result.error.message || result.error);
             showResponsePopup(
@@ -1266,6 +1408,50 @@ Please perform the following:
           "AI Assistant",
         ),
     });
+  };
+
+  // === PARSE AI RESPONSE FOR ANSWER HIGHLIGHTING ===
+  const parseAiResponseForAnswers = (responseText, options) => {
+    const answers = [];
+
+    // Try to extract answer numbers from various formats
+    // Format 1: "Correct Answer(s): 1" or "Correct Answer(s): 1, 2, 3"
+    const correctAnswerMatch = responseText.match(/Correct Answer\(s\)?:\s*([\d,\s]+)/i);
+    if (correctAnswerMatch) {
+      const numbersStr = correctAnswerMatch[1];
+      const numbers = numbersStr.split(/[,\s]+/).filter(n => n.trim()).map(n => parseInt(n.trim()));
+
+      // Convert 1-based to 0-based indices
+      numbers.forEach(num => {
+        if (!isNaN(num) && num > 0) {
+          answers.push(num - 1);
+        }
+      });
+    }
+
+    // Format 2: "The correct answer is option X" or "Option X is correct"
+    if (answers.length === 0) {
+      const optionMatch = responseText.match(/(?:option|answer)\s+(\d+)\s+is\s+correct/i);
+      if (optionMatch) {
+        const num = parseInt(optionMatch[1]);
+        if (!isNaN(num) && num > 0) {
+          answers.push(num - 1);
+        }
+      }
+    }
+
+    // Format 3: Look for standalone numbers at the beginning
+    if (answers.length === 0) {
+      const startMatch = responseText.match(/^\s*(\d+)(?:[,\s]+(\d+))*/);
+      if (startMatch) {
+        const num = parseInt(startMatch[1]);
+        if (!isNaN(num) && num > 0 && num <= options.length) {
+          answers.push(num - 1);
+        }
+      }
+    }
+
+    return answers.length > 0 ? answers : null;
   };
 
   const showResponsePopup = (
@@ -2815,6 +3001,14 @@ Please perform the following:
       return;
     }
 
+    // Block player-infraction telemetry (reports tab switches, focus loss, etc.)
+    const isPlayerInfraction = this._url?.includes("player-infraction") &&
+      (this._url?.includes("wayground.com") || this._url?.includes("quizizz.com"));
+    if (this._method === "POST" && isPlayerInfraction) {
+      GM_log("[+] Blocked player-infraction telemetry request");
+      return;
+    }
+
     // Intercept TestPortal requests and force wb=0
     const isTestPortal = this._url?.includes("testportal.net") || this._url?.includes("testportal.pl");
     if (this._method === "POST" && isTestPortal && this._url.includes("DoTestQuestion.html") && typeof data === "string") {
@@ -2879,6 +3073,12 @@ Please perform the following:
     // Block cheating detection requests
     if (urlString.includes("play-api/createTestGameActivity") && isWaygroundQuizizz) {
       GM_log("[+] Blocked cheating detection request to createTestGameActivity");
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200, statusText: "OK" }));
+    }
+
+    // Block player-infraction telemetry (reports tab switches, focus loss, etc.)
+    if (urlString.includes("player-infraction") && isWaygroundQuizizz && options?.method === "POST") {
+      GM_log("[+] Blocked player-infraction telemetry request");
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200, statusText: "OK" }));
     }
 
@@ -2980,10 +3180,30 @@ Please perform the following:
       sharedState.config.geminiApiKey = GM_getValue(GEMINI_API_KEY_STORAGE, "");
     }
 
+    // Migrate old thinkingBudget to geminiThinkingBudget
+    if (sharedState.config.thinkingBudget !== undefined && !sharedState.config.geminiThinkingBudget) {
+      sharedState.config.geminiThinkingBudget = sharedState.config.thinkingBudget;
+      GM_log("[+] Migrated old thinkingBudget to geminiThinkingBudget");
+    }
+
     // Force thinking budget to minimum of 512 tokens
-    if (sharedState.config.thinkingBudget < 512) {
-      sharedState.config.thinkingBudget = 512;
-      GM_log("[+] Thinking budget was below 512 tokens, forced to 512");
+    if (sharedState.config.geminiThinkingBudget < 512) {
+      sharedState.config.geminiThinkingBudget = 512;
+      GM_log("[+] Gemini thinking budget was below 512 tokens, forced to 512");
+    }
+
+    // Ensure OpenRouter defaults are set
+    if (!sharedState.config.openrouterMaxTokens) {
+      sharedState.config.openrouterMaxTokens = 2048;
+    }
+    if (!sharedState.config.openrouterReasoningMaxTokens) {
+      sharedState.config.openrouterReasoningMaxTokens = 2000;
+    }
+    if (!sharedState.config.openrouterReasoningEffort) {
+      sharedState.config.openrouterReasoningEffort = 'medium';
+    }
+    if (!sharedState.config.geminiModel) {
+      sharedState.config.geminiModel = 'gemini-flash-lite-latest';
     }
 
     // Force update the old server url
