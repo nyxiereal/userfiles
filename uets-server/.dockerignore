@@ -1,16 +1,33 @@
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.log
-*.json
-bin/
-lib/
-lib64/
-include/
-.lock
-pyvenv.cfg
-CACHEDIR.TAG
+# Git
 .git
 .gitignore
+.gitattributes
+
+# IDEs
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+uets-server
+*.o
+*.a
+*.so
+
+# Dependency management
+vendor/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Data (don't include local test data)
+data/
+
+# Documentation
+*.md
+README.md

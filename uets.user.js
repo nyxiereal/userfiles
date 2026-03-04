@@ -2953,7 +2953,10 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       GM_log("[+] Blocked cheating detection request to createTestGameActivity");
     }
 
-    const isQuizJoinUrl = url => (url.includes("play-api") && /soloJoin|rejoinGame|join/.test(url)) || url.includes("_quizserver/main/v2/quiz");
+    const isQuizJoinUrl = url => 
+      (url.includes("play-api") && /soloJoin|rejoinGame|join/.test(url)) 
+      || url.includes("_quizserver/main/v2/quiz")
+      || /\/_gameapi\/main\/public\/v1\/games\/[^\/]+\/rejoin/.test(url);
 
     if (typeof url === "string" && isQuizJoinUrl(url) && isWaygroundOrQuizizz(url)) {
       this.addEventListener("load", function () {
@@ -3116,10 +3119,23 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       return result;
     }
 
-    const isQuizJoinUrl = (urlString.includes("play-api") && /soloJoin|rejoinGame|join/.test(urlString)) || urlString.includes("_quizserver/main/v2/quiz");
+    console.log(urlString);
+
+    const isQuizJoinUrl = (
+      (urlString.includes("play-api") && /soloJoin|rejoinGame|join/.test(urlString))
+      || urlString.includes("_quizserver/main/v2/quiz")
+      // new path used by Wayground when you re‑enter a game
+      || /\/_gameapi\/main\/public\/v1\/games\/[^\/]+\/rejoin/.test(urlString)
+    );
+    console.log(isQuizJoinUrl);
+
     if (isQuizJoinUrl && isWaygroundQuizizz) {
       return originalFetch.call(this, url, options).then(response => {
-        if (response.ok) return response.clone().json().then(data => { processQuizData(data); return response; }).catch(() => response);
+        if (response.ok) {
+          return response.clone().json()
+            .then(data => { processQuizData(data); return response; })
+            .catch(() => response);
+        }
         return response;
       });
     }

@@ -1,36 +1,29 @@
-FROM ghcr.io/astral-sh/uv:debian AS builder
+# syntax=docker/dockerfile:1
+
+FROM golang:1.26-alpine AS builder
+
+WORKDIR /build
+
+# Cache dependency downloads separately from source changes
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# CGO_ENABLED=0 → pure-Go build (no system libs needed in final image)
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o uets-server .
+
+FROM alpine:latest
+
+RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
+COPY --from=builder /build/uets-server ./uets-server
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# viewer.html is embedded in the binary; no extra COPY needed.
+# /app/data is the persistent SQLite volume.
+VOLUME /app/data
 
-# Install dependencies into a virtual environment
-RUN uv venv /app/.venv && \
-    uv pip install --python /app/.venv/bin/python -r requirements.txt
-
-# Final stage
-FROM ghcr.io/astral-sh/uv:debian
-
-WORKDIR /app
-
-# Copy virtual environment from builder
-COPY --from=builder /app/.venv /app/.venv
-
-# Copy application code
-COPY main.py .
-
-# Create volume mount points for persistent data
-VOLUME ["/app/data"]
-
-# Set environment variables
-ENV DATA_FILE=/app/data/quiz_data.json
-ENV BLACKLIST_FILE=/app/data/ip_blacklist.json
-ENV PYTHONUNBUFFERED=1
-ENV PATH="/app/.venv/bin:$PATH"
-
-# Expose port
 EXPOSE 5000
 
-# Run with gunicorn for production
-CMD ["gunicorn", "-w", "1", "-k", "eventlet", "-b", "0.0.0.0:5000", "--access-logfile", "-", "--error-logfile", "-", "main:app"]
+CMD ["./uets-server"]
