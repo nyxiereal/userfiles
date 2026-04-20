@@ -334,6 +334,13 @@
     return data;
   };
 
+  const isWaygroundProceedUrl = (url) => {
+    return typeof url === "string" && (
+      /\/_gameapi\/main\/public\/v1\/games\/[^/]+\/proceed/.test(url) ||
+      (url.includes("play-api") && /proceedGame|soloProceed/.test(url))
+    );
+  };
+
   const processProceedGameResponse = (data) => {
     const responseData = data?.response || data?.data?.response;
     const questionData = data?.question || data?.data?.question;
@@ -344,9 +351,6 @@
     const questionId = responseData.questionId;
     const questionType = questionData.type;
     let correctAnswer = questionData.structure?.answer;
-    if (correctAnswer === 0 && questionData.structure?.options?.[0]) {
-      correctAnswer = questionData.structure.options[0].text;
-    }
     GM_log(`[*] Sending correct answer (${questionId} <${correctAnswer}>) to server`);
     sendAnswerToServer(questionId, correctAnswer, questionType);
   };
@@ -408,25 +412,45 @@
   };
 
   // === SERVER COMMUNICATION ===
-  const postToServer = async (endpoint, data) => {
+  const requestToServer = async (endpoint, { method = "POST", body = null, query = null } = {}) => {
     try {
-      const response = await fetch(`${sharedState.config.serverUrl}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+      const url = new URL(`${sharedState.config.serverUrl}${endpoint}`);
+      if (query) {
+        Object.entries(query).forEach(([key, value]) => {
+          if (value === undefined || value === null) return;
+          if (Array.isArray(value)) {
+            url.searchParams.set(key, JSON.stringify(value));
+            return;
+          }
+          url.searchParams.set(key, String(value));
+        });
+      }
+
+      const init = { method };
+      if (body !== null) {
+        init.headers = { "Content-Type": "application/json" };
+        init.body = JSON.stringify(body);
+      }
+
+      const response = await fetch(url, init);
       return await response.json();
     } catch (error) {
-      GM_log(`[!] Error posting to ${endpoint}:`, error);
+      GM_log(`[!] Error requesting ${endpoint}:`, error);
       return null;
     }
   };
 
   const sendQuestionToServer = (questionId, questionType, answerIds) =>
-    postToServer("/api/question", { questionId, questionType, answerIds });
+    requestToServer("/api/question", {
+      method: "GET",
+      query: { questionId, questionType, answerIds },
+    });
 
   const sendAnswerToServer = (questionId, correctAnswers, answerType = null) =>
-    postToServer("/api/answer", { questionId, correctAnswers, answerType });
+    requestToServer("/api/question", {
+      method: "POST",
+      body: { questionId, correctAnswers, answerType, questionType: answerType },
+    });
 
   // === ANSWER HIGHLIGHTING ===
   const highlightCorrectAnswers = (correctAnswers, questionType, showModal = true, useDataCy = true) => {
@@ -2967,7 +2991,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       });
     }
 
-    const isProceedUrl = url => url.includes("play-api") && /proceedGame|soloProceed/.test(url);
+    const isProceedUrl = (url) => isWaygroundProceedUrl(url);
 
     if (typeof url === "string" && isProceedUrl(url) && isWaygroundOrQuizizz(url)) {
       this.addEventListener("load", function () {
@@ -3028,7 +3052,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     }
 
     // Intercept POST requests to proceedGame and modify timeTaken
-    const isProceed = this._url?.includes("play-api") && /proceedGame|soloProceed/.test(this._url);
+    const isProceed = isWaygroundProceedUrl(this._url);
     const isWaygroundQuizizz = this._url?.includes("wayground.com") || this._url?.includes("quizizz.com");
     if (this._method === "POST" && isProceed && isWaygroundQuizizz && data) {
       try {
@@ -3100,7 +3124,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     }
 
     // Intercept POST requests to proceedGame via fetch
-    const isProceedUrl = urlString.includes("play-api") && /proceedGame|soloProceed/.test(urlString);
+    const isProceedUrl = isWaygroundProceedUrl(urlString);
     if (isProceedUrl && isWaygroundQuizizz && options?.method === "POST" && options.body) {
       try {
         return originalFetch.call(this, url, { ...options, body: JSON.stringify(processProceedGameRequest(JSON.parse(options.body))) });
@@ -3196,18 +3220,6 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       sharedState.config.geminiApiKey = GM_getValue(GEMINI_API_KEY_STORAGE, "");
     }
 
-    // Migrate old thinkingBudget to geminiThinkingBudget
-    if (sharedState.config.thinkingBudget !== undefined && !sharedState.config.geminiThinkingBudget) {
-      sharedState.config.geminiThinkingBudget = sharedState.config.thinkingBudget;
-      GM_log("[+] Migrated old thinkingBudget to geminiThinkingBudget");
-    }
-
-    // Force thinking budget to minimum of 512 tokens
-    if (sharedState.config.geminiThinkingBudget < 512) {
-      sharedState.config.geminiThinkingBudget = 512;
-      GM_log("[+] Gemini thinking budget was below 512 tokens, forced to 512");
-    }
-
     // Ensure OpenRouter defaults are set
     if (!sharedState.config.openrouterMaxTokens) {
       sharedState.config.openrouterMaxTokens = 2048;
@@ -3222,12 +3234,6 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       sharedState.config.geminiModel = 'gemini-flash-lite-latest';
     }
 
-    // Force update the old server url
-    if (sharedState.config.serverUrl === "https://uets.fuckingbitch.eu") {
-      sharedState.config.serverUrl = "https://uets.meowery.eu";
-      GM_log("[+] Server URL was updated from old to new");
-    }
-
     createToggleButton();
     initializeDomainSpecific();
     GM_log(`[+] UETS loaded on ${sharedState.currentDomain}`);
@@ -3236,7 +3242,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     // Check for first run and show welcome popup
     if (!GM_getValue(sharedState.firstRunKey, false)) {
       GM_setValue(sharedState.firstRunKey, true);
-      setTimeout(() => showWelcomePopup(), 1000); // Delay to ensure page is loaded
+      setTimeout(() => showWelcomePopup(), 1000); // ensure the page is loaded
     }
   };
 

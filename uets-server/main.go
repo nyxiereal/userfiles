@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -44,43 +43,15 @@ type connectionInfo struct {
 	GameID   string
 }
 
-// ---------------------------------------------------------------------------
-// CORS
-// ---------------------------------------------------------------------------
-
-var allowedOriginSuffixes = []string{
-	"wayground.com",
-	"quizizz.com",
-	"kahoot.it",
-}
-
-func isAllowedOrigin(origin string) bool {
-	if origin == "" {
-		return false
-	}
-	host := strings.TrimPrefix(strings.TrimPrefix(origin, "https://"), "http://")
-	// Strip port (e.g. "example.com:3000" → "example.com")
-	if idx := strings.LastIndex(host, ":"); idx > 0 && !strings.Contains(host[idx:], ".") {
-		host = host[:idx]
-	}
-	for _, suffix := range allowedOriginSuffixes {
-		if host == suffix || strings.HasSuffix(host, "."+suffix) {
-			return true
-		}
-	}
-	return false
-}
-
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Let socket.io handle its own CORS; only add headers for other paths.
-		if !strings.HasPrefix(r.URL.Path, "/api/socket.io") {
-			origin := r.Header.Get("Origin")
-			if isAllowedOrigin(origin) {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			}
+		// Fully permissive CORS for all HTTP routes.
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		if requestedHeaders := r.Header.Get("Access-Control-Request-Headers"); requestedHeaders != "" {
+			w.Header().Set("Access-Control-Allow-Headers", requestedHeaders)
+		} else {
+			w.Header().Set("Access-Control-Allow-Headers", "*")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -175,6 +146,14 @@ type dbQuestion struct {
 	UpdatedAt      string
 }
 
+type apiQuestionRequest struct {
+	QuestionID     string      `json:"questionId"`
+	QuestionType   string      `json:"questionType"`
+	AnswerIDs      interface{} `json:"answerIds"`
+	CorrectAnswers interface{} `json:"correctAnswers"`
+	AnswerType     string      `json:"answerType"`
+}
+
 func getQuestion(id string) (*dbQuestion, error) {
 	var q dbQuestion
 	err := db.QueryRow(
@@ -188,6 +167,47 @@ func getQuestion(id string) (*dbQuestion, error) {
 		return nil, err
 	}
 	return &q, nil
+}
+
+func stringPtr(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+func writeQuestionResponse(w http.ResponseWriter, q *dbQuestion, questionType string) {
+	if q == nil {
+		writeJSON(w, map[string]interface{}{
+			"hasAnswer":      false,
+			"correctAnswers": nil,
+			"questionType":   questionType,
+		}, http.StatusOK)
+		return
+	}
+
+	if !q.CorrectAnswers.Valid {
+		resolvedType := questionType
+		if q.QuestionType.Valid {
+			resolvedType = q.QuestionType.String
+		}
+		writeJSON(w, map[string]interface{}{
+			"hasAnswer":      false,
+			"correctAnswers": nil,
+			"questionType":   resolvedType,
+		}, http.StatusOK)
+		return
+	}
+
+	resolvedType := questionType
+	if q.QuestionType.Valid {
+		resolvedType = q.QuestionType.String
+	}
+	writeJSON(w, map[string]interface{}{
+		"hasAnswer":      true,
+		"correctAnswers": parseStoredAnswer(q.CorrectAnswers.String),
+		"questionType":   resolvedType,
+	}, http.StatusOK)
 }
 
 // saveQuestion mirrors the Python save_question logic:
@@ -240,17 +260,37 @@ func saveQuestion(questionID string, questionType *string, correctAnswers interf
 // HTTP handlers
 // ---------------------------------------------------------------------------
 
-// POST /api/question
-func handleQueryQuestion(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+func handleQuestionEndpoint(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		questionID := r.URL.Query().Get("questionId")
+		if questionID == "" {
+			writeJSON(w, map[string]string{"error": "Missing questionId"}, http.StatusBadRequest)
+			return
+		}
+		questionType := r.URL.Query().Get("questionType")
+		q, err := getQuestion(questionID)
+		if err != nil {
+			writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
+			return
+		}
+		if q == nil {
+			if saveErr := saveQuestion(questionID, stringPtr(questionType), nil); saveErr != nil {
+				writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
+				return
+			}
+			writeQuestionResponse(w, nil, questionType)
+			return
+		}
+		writeQuestionResponse(w, q, questionType)
+		return
+	case http.MethodPost:
+	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var req struct {
-		QuestionID   string      `json:"questionId"`
-		QuestionType string      `json:"questionType"`
-		AnswerIDs    interface{} `json:"answerIds"`
-	}
+
+	var req apiQuestionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, map[string]string{"error": "invalid JSON"}, http.StatusBadRequest)
 		return
@@ -260,87 +300,48 @@ func handleQueryQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.CorrectAnswers != nil {
+		questionType := req.AnswerType
+		if questionType == "" {
+			questionType = req.QuestionType
+		}
+		existing, err := getQuestion(req.QuestionID)
+		if err != nil {
+			writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
+			return
+		}
+		if existing != nil && existing.CorrectAnswers.Valid {
+			writeJSON(w, map[string]string{"error": "Answer already exists for this question"}, http.StatusForbidden)
+			return
+		}
+		if err := saveQuestion(req.QuestionID, stringPtr(questionType), req.CorrectAnswers); err != nil {
+			writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, map[string]bool{"success": true}, http.StatusOK)
+		return
+	}
+
+	logger.Info("question",
+		zap.String("id", req.QuestionID),
+		zap.Bool("hasAnswer", false),
+	)
+
 	q, err := getQuestion(req.QuestionID)
 	if err != nil {
 		writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
 		return
 	}
 
-	hasAnswer := q != nil && q.CorrectAnswers.Valid
-	logger.Info("question",
-		zap.String("id", req.QuestionID),
-		zap.Bool("hasAnswer", hasAnswer),
-	)
-
-	// New question: create with NULL answer and return hasAnswer=false
 	if q == nil {
-		qt := req.QuestionType
-		if saveErr := saveQuestion(req.QuestionID, &qt, nil); saveErr != nil {
+		if saveErr := saveQuestion(req.QuestionID, stringPtr(req.QuestionType), nil); saveErr != nil {
 			writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, map[string]interface{}{
-			"hasAnswer":      false,
-			"correctAnswers": nil,
-			"questionType":   req.QuestionType,
-		}, http.StatusOK)
+		writeQuestionResponse(w, nil, req.QuestionType)
 		return
 	}
-
-	// Existing question without answer yet
-	if !q.CorrectAnswers.Valid {
-		writeJSON(w, map[string]interface{}{
-			"hasAnswer":      false,
-			"correctAnswers": nil,
-			"questionType":   q.QuestionType.String,
-		}, http.StatusOK)
-		return
-	}
-
-	// Known answer
-	writeJSON(w, map[string]interface{}{
-		"hasAnswer":      true,
-		"correctAnswers": parseStoredAnswer(q.CorrectAnswers.String),
-		"questionType":   q.QuestionType.String,
-	}, http.StatusOK)
-}
-
-// POST /api/answer
-func handleSaveAnswer(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	var req struct {
-		QuestionID     string      `json:"questionId"`
-		CorrectAnswers interface{} `json:"correctAnswers"`
-		AnswerType     string      `json:"answerType"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, map[string]string{"error": "invalid JSON"}, http.StatusBadRequest)
-		return
-	}
-	if req.QuestionID == "" || req.CorrectAnswers == nil || req.AnswerType == "" {
-		writeJSON(w, map[string]string{"error": "Missing required fields"}, http.StatusBadRequest)
-		return
-	}
-
-	existing, err := getQuestion(req.QuestionID)
-	if err != nil {
-		writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
-		return
-	}
-	if existing != nil && existing.CorrectAnswers.Valid {
-		writeJSON(w, map[string]string{"error": "Answer already exists for this question"}, http.StatusForbidden)
-		return
-	}
-
-	at := req.AnswerType
-	if err := saveQuestion(req.QuestionID, &at, req.CorrectAnswers); err != nil {
-		writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, map[string]bool{"success": true}, http.StatusOK)
+	writeQuestionResponse(w, q, req.QuestionType)
 }
 
 // GET /int/stats
@@ -482,7 +483,7 @@ func setupSocketIO() *sio.Server {
 	opts := sio.DefaultServerOptions()
 	opts.SetCors(&types.Cors{
 		Origin:      "*",
-		Credentials: true,
+		Credentials: false,
 	})
 	io := sio.NewServer(nil, opts)
 
@@ -661,8 +662,8 @@ func main() {
 	})
 
 	// Quiz API
-	mux.HandleFunc("/api/question", handleQueryQuestion)
-	mux.HandleFunc("/api/answer", handleSaveAnswer)
+	mux.HandleFunc("/api/question", handleQuestionEndpoint)
+	mux.HandleFunc("/api/answer", handleQuestionEndpoint)
 
 	// Socket.IO (handles its own CORS)
 	mux.Handle("/api/socket.io/", io.ServeHandler(nil))

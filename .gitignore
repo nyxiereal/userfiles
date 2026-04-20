@@ -1,10 +1,3 @@
-uets-server/.lock
-uets-server/quiz_data.json
-uets-server/bin
-uets-server/lib
-uets-server/lib64
-uets-server/CACHEDIR.TAG
-uets-server/pyvenv.cfg
 uets-server/ip_blacklist.json
 *.log
 __pycache__
@@ -12,3 +5,4 @@ include
 jquery.*
 uets-server/quiz_data.db
 data
+uets-server/main
