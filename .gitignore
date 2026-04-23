@@ -6,3 +6,4 @@ jquery.*
 uets-server/quiz_data.db
 data
 uets-server/main
+*.db

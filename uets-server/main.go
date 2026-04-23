@@ -177,6 +177,7 @@ func stringPtr(v string) *string {
 }
 
 func writeQuestionResponse(w http.ResponseWriter, q *dbQuestion, questionType string) {
+	questionType = normalizeQuestionType(questionType)
 	if q == nil {
 		writeJSON(w, map[string]interface{}{
 			"hasAnswer":      false,
@@ -186,11 +187,8 @@ func writeQuestionResponse(w http.ResponseWriter, q *dbQuestion, questionType st
 		return
 	}
 
+	resolvedType := resolveQuestionType(q, questionType)
 	if !q.CorrectAnswers.Valid {
-		resolvedType := questionType
-		if q.QuestionType.Valid {
-			resolvedType = q.QuestionType.String
-		}
 		writeJSON(w, map[string]interface{}{
 			"hasAnswer":      false,
 			"correctAnswers": nil,
@@ -199,10 +197,6 @@ func writeQuestionResponse(w http.ResponseWriter, q *dbQuestion, questionType st
 		return
 	}
 
-	resolvedType := questionType
-	if q.QuestionType.Valid {
-		resolvedType = q.QuestionType.String
-	}
 	writeJSON(w, map[string]interface{}{
 		"hasAnswer":      true,
 		"correctAnswers": parseStoredAnswer(q.CorrectAnswers.String),
@@ -268,7 +262,7 @@ func handleQuestionEndpoint(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, map[string]string{"error": "Missing questionId"}, http.StatusBadRequest)
 			return
 		}
-		questionType := r.URL.Query().Get("questionType")
+		questionType := normalizeQuestionType(r.URL.Query().Get("questionType"))
 		q, err := getQuestion(questionID)
 		if err != nil {
 			writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
@@ -280,6 +274,10 @@ func handleQuestionEndpoint(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeQuestionResponse(w, nil, questionType)
+			return
+		}
+		if err := backfillQuestionTypeIfMissing(q.QuestionID, q.QuestionType, resolveQuestionType(q, questionType)); err != nil {
+			writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
 			return
 		}
 		writeQuestionResponse(w, q, questionType)
@@ -301,9 +299,12 @@ func handleQuestionEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.CorrectAnswers != nil {
-		questionType := req.AnswerType
+		questionType := normalizeQuestionType(req.AnswerType)
 		if questionType == "" {
-			questionType = req.QuestionType
+			questionType = normalizeQuestionType(req.QuestionType)
+		}
+		if questionType == "" {
+			questionType = inferQuestionTypeFromAnswerValue(req.CorrectAnswers)
 		}
 		existing, err := getQuestion(req.QuestionID)
 		if err != nil {
@@ -334,14 +335,20 @@ func handleQuestionEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if q == nil {
-		if saveErr := saveQuestion(req.QuestionID, stringPtr(req.QuestionType), nil); saveErr != nil {
+		questionType := normalizeQuestionType(req.QuestionType)
+		if saveErr := saveQuestion(req.QuestionID, stringPtr(questionType), nil); saveErr != nil {
 			writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
 			return
 		}
-		writeQuestionResponse(w, nil, req.QuestionType)
+		writeQuestionResponse(w, nil, questionType)
 		return
 	}
-	writeQuestionResponse(w, q, req.QuestionType)
+	questionType := normalizeQuestionType(req.QuestionType)
+	if err := backfillQuestionTypeIfMissing(q.QuestionID, q.QuestionType, resolveQuestionType(q, questionType)); err != nil {
+		writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
+		return
+	}
+	writeQuestionResponse(w, q, questionType)
 }
 
 // GET /int/stats
@@ -394,8 +401,8 @@ func handleQuestions(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:  q.CreatedAt,
 			UpdatedAt:  q.UpdatedAt,
 		}
-		if q.QuestionType.Valid {
-			item.QuestionType = &q.QuestionType.String
+		if resolvedType := resolveQuestionType(&q, ""); resolvedType != "" {
+			item.QuestionType = &resolvedType
 		}
 		if q.CorrectAnswers.Valid {
 			item.CorrectAnswers = parseStoredAnswer(q.CorrectAnswers.String)
@@ -645,6 +652,11 @@ func main() {
 		logger.Fatal("db init failed", zap.Error(err))
 	}
 	defer db.Close()
+	if updated, backfillErr := backfillMissingQuestionTypesFromStoredAnswers(); backfillErr != nil {
+		logger.Fatal("question type backfill failed", zap.Error(backfillErr))
+	} else if updated > 0 {
+		logger.Info("backfilled missing question types", zap.Int("updated", updated))
+	}
 
 	io := setupSocketIO()
 
