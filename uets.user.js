@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.6.2
+// @version      1.6.3
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -57,8 +57,27 @@
     enableReactionSpam: false,
     reactionSpamCount: 1,
     reactionSpamDelay: 2000,
-    enableSiteOptimizations: false
+    enableSiteOptimizations: false,
+    enablePowerupPicker: true,
+    powerupPickerAutoApply: false
   };
+
+  const POWERUP_PRESET_KEY = "UETS_POWERUP_PRESET";
+
+  const WAYGROUND_POWERUPS = [
+    { name: "2x", label: "2×", img: "https://cf.quizizz.com/game/img/powerups/2XV2.svg" },
+    { name: "50-50", label: "50/50", img: "https://cf.quizizz.com/game/img/powerups/FiftyFiftyV2.svg" },
+    { name: "streak-booster", label: "Streak Booster", img: "https://cf.quizizz.com/game/img/powerups/StreakBoosterV2.svg" },
+    { name: "double-jeopardy", label: "Double Jeopardy", img: "https://cf.quizizz.com/game/img/powerups/DoubleJeopardyV2.svg" },
+    { name: "eraser", label: "Eraser", img: "https://cf.quizizz.com/game/img/powerups/EraserV2.svg" },
+    { name: "immunity", label: "Immunity", img: "https://cf.quizizz.com/game/img/powerups/ImmunityV2.svg" },
+    { name: "time-freeze", label: "Time Freeze", img: "https://cf.quizizz.com/game/img/powerups/TimeFreezeV2.svg" },
+    { name: "power-play", label: "Power Play", img: "https://cf.quizizz.com/game/img/powerups/PowerPlayV2.svg" },
+    { name: "supersonic", label: "Supersonic", img: "https://cf.quizizz.com/game/img/powerups/SuperSonicV2.svg" },
+    { name: "streak-saver", label: "Streak Saver", img: "https://cf.quizizz.com/game/img/powerups/StreakSaverV2.svg" },
+    { name: "glitch", label: "Glitch", img: "https://cf.quizizz.com/game/img/powerups/GlitchV2.svg" },
+    { name: "gift", label: "Gift", img: "https://cf.quizizz.com/game/img/powerups/GiftV2.svg" },
+  ];
 
 
   // Models that use effort-based reasoning
@@ -141,6 +160,30 @@
   // === SHARED STYLES ===
   GM_addStyle(`
   @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap');@import url('https://fonts.googleapis.com/icon?family=Material+Icons+Outlined');:root{--md-primary:#6750A4;--md-primary-container:#EADDFF;--md-on-primary:#FFFFFF;--md-on-primary-container:#21005D;--md-secondary:#625B71;--md-secondary-container:#E8DEF8;--md-on-secondary:#FFFFFF;--md-on-secondary-container:#1D192B;--md-tertiary:#7D5260;--md-tertiary-container:#FFD8E4;--md-on-tertiary:#FFFFFF;--md-on-tertiary-container:#31111D;--md-surface:#FEF7FF;--md-surface-dim:#DED8E1;--md-surface-bright:#FEF7FF;--md-surface-container-lowest:#FFFFFF;--md-surface-container-low:#F7F2FA;--md-surface-container:#F1ECF4;--md-surface-container-high:#ECE6F0;--md-surface-container-highest:#E6E0E9;--md-on-surface:#1C1B1F;--md-on-surface-variant:#49454F;--md-outline:#79747E;--md-outline-variant:#CAC4D0;--md-error:#B3261E;--md-error-container:#F9DEDC;--md-on-error:#FFFFFF;--md-on-error-container:#410E0B;--md-shadow:#000000}.uets-card{background:var(--md-surface-container);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);overflow:hidden;font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-elevated-card{background:var(--md-surface-container-low);border-radius:12px;box-shadow:0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);overflow:hidden;font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-filled-button{background:var(--md-primary);color:var(--md-on-primary);border:none;border-radius:20px;padding:10px 24px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-filled-button:hover{box-shadow:0 2px 4px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);transform:translateY(-1px)}.uets-filled-button:active{transform:translateY(0px);box-shadow:0 1px 2px rgba(0,0,0,0.12)}.uets-outlined-button{background:transparent;color:var(--md-primary);border:1px solid var(--md-outline);border-radius:20px;padding:10px 24px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-outlined-button:hover{background:rgba(103, 80, 164, 0.08);border-color:var(--md-primary)}.uets-text-button{background:transparent;color:var(--md-primary);border:none;border-radius:20px;padding:10px 12px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-text-button:hover{background:rgba(103, 80, 164, 0.08)}.uets-fab{background:var(--md-primary-container);color:var(--md-on-primary-container);border:none;border-radius:16px;width:56px;height:56px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.2), 0 6px 10px rgba(0,0,0,0.14), 0 1px 18px rgba(0,0,0,0.12);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);font-size:24px}.uets-fab:hover{box-shadow:0 5px 5px rgba(0,0,0,0.2), 0 9px 18px rgba(0,0,0,0.14), 0 3px 14px rgba(0,0,0,0.12);transform:scale(1.05)}.uets-fab.uets-mods-hidden-state{background:transparent;box-shadow:none}.uets-fab.uets-mods-hidden-state:hover{background:rgba(103, 80, 164, 0.08);box-shadow:none;transform:scale(1.05)}.uets-success-button{background:#a6e3a1;color:white}.uets-warning-button{background:#fab387;color:white}.uets-purple-button{background:#cba6f7;color:white}.uets-ai-button,.uets-copy-prompt-button,.uets-ddg-button,.uets-ddg-link,.uets-gemini-button,.uets-get-answer-button{display:inline-flex;align-items:center;gap:8px;padding:4px 8px;color:var(--md-on-primary);text-decoration:none;border-radius:20px;font-size:14px;font-weight:500;cursor:pointer;text-align:center;vertical-align:middle;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);border:none;font-family:'Roboto', sans-serif;min-height:40px;margin:1px;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)}.uets-ai-button:hover,.uets-copy-prompt-button:hover,.uets-ddg-button:hover,.uets-ddg-link:hover,.uets-gemini-button:hover,.uets-get-answer-button:hover{box-shadow:0 4px 8px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.1);transform:translateY(-2px)}.uets-ddg-button,.uets-ddg-link{background:#a6e3a1 !important;color:white !important}.uets-ai-button,.uets-gemini-button{background:#74c7ec !important;color:white !important}.uets-copy-prompt-button{background:#fab387 !important;color:white !important}.uets-get-answer-button{background:#cba6f7 !important;color:white !important}.uets-ddg-button::before,.uets-ddg-link::before{content:'search';font-family:'Material Icons Outlined';font-size:18px}.uets-ai-button::before,.uets-gemini-button::before{content:'psychology';font-family:'Material Icons Outlined';font-size:18px}.uets-copy-prompt-button::before{content:'content_copy';font-family:'Material Icons Outlined';font-size:18px}.uets-get-answer-button::before{content:'lightbulb';font-family:'Material Icons Outlined';font-size:18px}.uets-option-wrapper{display:flex;flex-direction:column;align-items:stretch;justify-content:space-between;height:100%}.uets-option-wrapper > button.option{display:flex;flex-direction:column;flex-grow:1;min-height:0;width:100%}.uets-ddg-link-option-item{width:100%;box-sizing:border-box;margin-top:12px;padding:8px 0;border-radius:0 0 12px 12px;flex-shrink:0}.uets-main-question-buttons-container{display:flex;justify-content:center;gap:4px;background:#313244;border-radius:12px;margin:1px;flex-wrap:wrap;padding:2px}.uets-response-popup{position:fixed;top:20px;right:20px;background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:12px;padding:16px 20px;z-index:10004;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;font-size:14px;line-height:20px;animation:slideInRight 0.3s ease-out;cursor:pointer;display:flex;align-items:flex-start;gap:12px}@keyframes slideInRight{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes slideOutRight{from{transform:translateX(0);opacity:1}to{transform:translateX(400px);opacity:0}}.uets-response-popup.uets-toast-dismiss{animation:slideOutRight 0.3s ease-in forwards}.uets-response-popup-header{display:none}.uets-response-popup-content{white-space:normal;font-size:14px;line-height:20px;color:var(--md-on-surface);padding:0;max-height:none;overflow:visible;flex:1}.uets-response-popup-close{background:none;border:none;width:24px;height:24px;border-radius:12px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:20px;padding:0;flex-shrink:0}.uets-response-popup-close::before{content:'close'}.uets-response-popup-close:hover{background:rgba(103, 80, 164, 0.08);color:var(--md-primary)}.uets-response-popup-loading{text-align:center;font-style:normal;color:var(--md-on-surface-variant);padding:0;font-size:14px;display:flex;flex-direction:column;align-items:center;gap:8px}.uets-welcome-popup{position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:28px;padding:0;z-index:10004;min-width:320px;max-width:90vh;max-height:80vh;overflow:hidden;box-shadow:0 10px 25px rgba(0,0,0,0.35), 0 6px 10px rgba(0,0,0,0.25);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif !important;font-size:18px}.uets-response-popup-header{display:flex;justify-content:space-between;align-items:center;padding:24px 24px 0;margin-bottom:16px}.uets-response-popup-title{font-weight:600;font-size:22px;color:var(--md-on-surface);line-height:28px}.uets-response-popup-close{background:none;border:none;width:48px;height:48px;border-radius:24px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:24px}.uets-response-popup-close::before{content:'close'}.uets-response-popup-close:hover{background:rgba(103, 80, 164, 0.08);color:var(--md-primary)}.uets-response-popup-content{white-space:pre-wrap;font-size:14px;line-height:20px;color:var(--md-on-surface);padding:0 24px 24px;max-height:calc(80vh - 120px);overflow-y:auto}.uets-response-popup-content b,.uets-response-popup-content strong{color:var(--md-primary);font-weight:600}.uets-response-popup-loading{text-align:center;font-style:normal;color:var(--md-on-surface-variant);padding:40px 24px;font-size:16px;display:flex;flex-direction:column;align-items:center;gap:16px}.uets-loading-spinner{width:32px;height:32px;border:3px solid var(--md-outline-variant);border-top:3px solid var(--md-primary);border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}#uets-toggle-ui-button{position:fixed;bottom:20px;left:20px;z-index:10002;background:var(--md-primary-container);color:var(--md-on-primary-container);border:none;border-radius:16px;width:56px;height:56px;cursor:pointer;box-shadow:0 3px 5px rgba(0,0,0,0.2), 0 6px 10px rgba(0,0,0,0.14), 0 1px 18px rgba(0,0,0,0.12);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);user-select:none;display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:24px}#uets-toggle-ui-button:hover{box-shadow:0 5px 5px rgba(0,0,0,0.2), 0 9px 18px rgba(0,0,0,0.14), 0 3px 14px rgba(0,0,0,0.12);transform:scale(1.05)}#uets-toggle-ui-button.uets-mods-hidden-state{background:transparent;box-shadow:none}#uets-toggle-ui-button.uets-mods-hidden-state:hover{background:rgba(103, 80, 164, 0.08);box-shadow:none}.uets-correct-answer{background:rgba(76, 175, 80, 0.2) !important;border:3px solid #4CAF50 !important;border-radius:12px !important;box-shadow:0 0 12px rgba(76, 175, 80, 0.5), inset 0 0 8px rgba(76, 175, 80, 0.15) !important;animation:uets-correct-pulse 2s ease-in-out infinite !important}@keyframes uets-correct-pulse{0%,100%{box-shadow:0 0 12px rgba(76, 175, 80, 0.5), inset 0 0 8px rgba(76, 175, 80, 0.15)}50%{box-shadow:0 0 20px rgba(76, 175, 80, 0.7), inset 0 0 12px rgba(76, 175, 80, 0.25)}}.uets-answer-indicator{position:absolute;top:8px;right:8px;background:linear-gradient(135deg, #4CAF50, #45a049);color:white;padding:6px 10px;border-radius:16px;font-size:14px;font-weight:700;z-index:1000;font-family:'Material Icons Outlined';display:flex;align-items:center;justify-content:center;gap:4px;box-shadow:0 2px 8px rgba(76, 175, 80, 0.4)}.uets-answer-indicator::before{content:'star';font-size:18px}.uets-answer-indicator::after{content:'Correct';font-family:'Roboto', sans-serif;font-size:12px;font-weight:600}.uets-streak-bonus{margin-left:8px;color:#FFD700;font-weight:600;font-size:14px;text-shadow:1px 1px 2px rgba(0,0,0,0.3);font-family:'Roboto', sans-serif}.uets-config-gui{position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);background:var(--md-surface);color:var(--md-on-surface);border-radius:28px;padding:0;z-index:10003;width:640px;max-width:90vw;max-height:90vh;overflow:hidden;box-shadow:0 24px 38px rgba(0,0,0,0.14), 0 9px 46px rgba(0,0,0,0.12), 0 11px 15px rgba(0,0,0,0.20);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-config-header{display:flex;justify-content:space-between;align-items:center;padding:24px 24px 12px;border-bottom:1px solid var(--md-outline-variant)}.uets-config-title{font-size:24px;font-weight:400;color:var(--md-on-surface);line-height:32px;letter-spacing:0}.uets-config-close{background:none;border:none;width:40px;height:40px;border-radius:20px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:20px}.uets-config-close::before{content:'close'}.uets-config-close:hover{background:var(--md-surface-container-highest);color:var(--md-on-surface)}.uets-config-content{max-height:calc(90vh - 200px);overflow-y:auto}.uets-config-section{margin-bottom:8px;padding:16px 24px}.uets-config-section-title{font-size:16px;font-weight:500;margin-bottom:16px;color:var(--md-primary);line-height:24px;letter-spacing:0.1px}.uets-config-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;min-height:56px}.uets-config-label-container{display:flex;align-items:center;flex:1;margin-right:16px}.uets-config-label{font-size:16px;font-weight:400;color:var(--md-on-surface);margin-left:12px;line-height:24px;letter-spacing:0.5px}.uets-config-input,.uets-config-select{background:var(--md-surface-container-highest);border:1px solid var(--md-outline);border-radius:4px;padding:16px;color:var(--md-on-surface);font-size:16px;font-family:'Roboto', sans-serif;width:200px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);box-sizing:border-box}.uets-config-input:focus,.uets-config-select:focus{outline:none;border-color:var(--md-primary);border-width:2px;padding:15px}.uets-config-input:disabled{background:var(--md-surface-variant);color:var(--md-on-surface-variant);border-color:var(--md-outline-variant)}.uets-switch{position:relative;display:inline-block;width:52px;height:32px;cursor:pointer}.uets-switch input{opacity:0;width:0;height:0}.uets-switch-slider{position:absolute;top:0;left:0;right:0;bottom:0;background:var(--md-outline);border-radius:16px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);border:2px solid var(--md-outline)}.uets-switch-slider:before{position:absolute;content:"";height:20px;width:20px;left:4px;bottom:4px;background:var(--md-surface-container-highest);border-radius:50%;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);box-shadow:0 1px 3px rgba(0,0,0,0.4)}.uets-switch input:checked + .uets-switch-slider{background:var(--md-primary);border-color:var(--md-primary)}.uets-switch input:checked + .uets-switch-slider:before{transform:translateX(20px);background:var(--md-on-primary)}.uets-switch:hover .uets-switch-slider{box-shadow:0 0 0 8px rgba(103, 80, 164, 0.04)}.uets-switch input:checked:hover + .uets-switch-slider{box-shadow:0 0 0 8px rgba(103, 80, 164, 0.08)}.uets-config-info{background:var(--md-secondary-container);color:var(--md-on-secondary-container);border:none;border-radius:50%;width:22px;height:22px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);font-weight:500}.uets-config-info::before{content:'help';font-size:20px}.uets-config-info:hover{background:var(--md-secondary);color:var(--md-on-secondary);transform:scale(1.1)}.uets-config-buttons{display:flex;justify-content:flex-end;gap:8px;padding:16px 24px 24px;border-top:1px solid var(--md-outline-variant);background:var(--md-surface-container-low)}.uets-config-button{padding:10px 24px;border:none;border-radius:20px;cursor:pointer;font-size:14px;font-weight:500;font-family:'Roboto', sans-serif;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:inline-flex;align-items:center;gap:8px;min-height:40px;justify-content:center;letter-spacing:0.1px}.uets-config-save{background:var(--md-primary);color:var(--md-on-primary)}.uets-config-save::before{content:'save';font-family:'Material Icons Outlined';font-size:18px}.uets-config-save:hover{box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);background:#5a4089}.uets-config-reset{background:var(--md-error);color:var(--md-on-error)}.uets-config-reset::before{content:'refresh';font-family:'Material Icons Outlined';font-size:18px}.uets-config-reset:hover{box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);background:#a02117}.uets-config-cancel{background:transparent;color:var(--md-primary);border:1px solid var(--md-outline)}.uets-config-cancel::before{content:'cancel';font-family:'Material Icons Outlined';font-size:18px}.uets-config-cancel:hover{background:var(--md-surface-container-highest);border-color:var(--md-primary)}.uets-config-content::-webkit-scrollbar{width:8px}.uets-config-content::-webkit-scrollbar-track{background:var(--md-surface-container-low)}.uets-config-content::-webkit-scrollbar-thumb{background:var(--md-outline-variant);border-radius:4px}.uets-config-content::-webkit-scrollbar-thumb:hover{background:var(--md-outline)}.uets-profile-selector{margin:4px;padding:16px;background:var(--md-surface-container-low);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.12)}.uets-profile-list{display:flex;gap:8px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--md-outline-variant) transparent}.uets-profile-list::-webkit-scrollbar{height:6px}.uets-profile-list::-webkit-scrollbar-track{background:transparent}.uets-profile-list::-webkit-scrollbar-thumb{background:var(--md-outline-variant);border-radius:3px}.uets-profile-list::-webkit-scrollbar-thumb:hover{background:var(--md-outline)}.uets-profile-button{background:var(--md-surface-container-highest);color:var(--md-on-surface);border:1px solid var(--md-outline);border-radius:20px;padding:8px 16px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;white-space:nowrap;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);flex-shrink:0}.uets-profile-button:hover{background:var(--md-surface-container);border-color:var(--md-primary)}.uets-profile-button.active{background:var(--md-primary);color:var(--md-on-primary);border-color:var(--md-primary)}.uets-profile-button.active:hover{background:#5a4089}@media (prefers-color-scheme: dark){:root{--md-primary:#D0BCFF;--md-primary-container:#4F378B;--md-on-primary:#371E73;--md-on-primary-container:#EADDFF;--md-secondary:#CCC2DC;--md-secondary-container:#4A4458;--md-on-secondary:#332D41;--md-on-secondary-container:#E8DEF8;--md-tertiary:#EFB8C8;--md-tertiary-container:#633B48;--md-on-tertiary:#492532;--md-on-tertiary-container:#FFD8E4;--md-surface:#141218;--md-surface-dim:#141218;--md-surface-bright:#3B383E;--md-surface-container-lowest:#0F0D13;--md-surface-container-low:#1D1B20;--md-surface-container:#211F26;--md-surface-container-high:#2B2930;--md-surface-container-highest:#36343B;--md-on-surface:#E6E0E9;--md-on-surface-variant:#CAC4D0;--md-outline:#938F99;--md-outline-variant:#49454F;--md-error:#F2B8B5;--md-error-container:#8C1D18;--md-on-error:#601410;--md-on-error-container:#F9DEDC;--md-shadow:#000000}}.kahoot-answer-indicator{position:absolute;top:12px;right:18px;min-width:24px;height:24px;background:linear-gradient(135deg, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0.7) 100%);color:#fff;padding:0 8px;border-radius:12px;font-size:15px;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.18);display:flex;align-items:center;justify-content:center;border:2px solid #fff2;z-index:1000;pointer-events:none;user-select:none;transition:transform 0.15s}.kahoot-answer-button{position:relative}.uets-testportal-invisible{opacity:0 !important;pointer-events:auto !important}
+.uets-powerup-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10005;display:flex;align-items:center;justify-content:center;padding:16px;font-family:'Roboto',sans-serif}
+.uets-powerup-modal{background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:20px;max-width:720px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 10px 25px rgba(0,0,0,0.35);overflow:hidden}
+.uets-powerup-header{display:flex;justify-content:space-between;align-items:center;padding:20px 24px 8px}
+.uets-powerup-title{font-size:20px;font-weight:600}
+.uets-powerup-subtitle{padding:0 24px 12px;font-size:13px;color:var(--md-on-surface-variant);line-height:1.4}
+.uets-powerup-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;padding:0 24px 16px;overflow-y:auto;max-height:min(52vh,480px)}
+.uets-powerup-tile{border:2px solid var(--md-outline-variant);font:inherit;color:inherit;border-radius:12px;padding:8px 6px;cursor:pointer;text-align:center;background:var(--md-surface-container);transition:all 0.15s ease;user-select:none}
+.uets-powerup-tile:hover{border-color:var(--md-primary);background:var(--md-surface-container-lowest)}
+.uets-powerup-tile.selected{border-color:var(--md-primary);background:var(--md-primary-container);box-shadow:0 0 0 1px var(--md-primary)}
+.uets-powerup-tile img{width:48px;height:48px;object-fit:contain;display:block;margin:0 auto 6px}
+.uets-powerup-tile-label{font-size:11px;font-weight:500;line-height:1.2;color:var(--md-on-surface)}
+.uets-powerup-tile{position:relative}
+.uets-powerup-tile-count{position:absolute;top:4px;right:4px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--md-primary);color:var(--md-on-primary);font-size:11px;font-weight:700;line-height:18px}
+.uets-powerup-queue-wrap{padding:0 24px 12px}
+.uets-powerup-queue-label{font-size:12px;font-weight:500;color:var(--md-on-surface-variant);margin-bottom:8px}
+.uets-powerup-queue{display:flex;flex-wrap:wrap;gap:6px;min-height:36px;padding:8px;border-radius:10px;background:var(--md-surface-container);border:1px dashed var(--md-outline-variant)}
+.uets-powerup-queue:empty::before{content:'Click powerups below to add — right-click a tile to remove one';color:var(--md-on-surface-variant);font-size:12px}
+.uets-powerup-queue-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 8px 4px 4px;border-radius:8px;background:var(--md-primary-container);border:1px solid var(--md-outline-variant);font-size:12px}
+.uets-powerup-queue-chip img{width:22px;height:22px;object-fit:contain}
+.uets-powerup-queue-chip button{border:none;background:transparent;color:var(--md-on-surface-variant);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;border-radius:4px}
+.uets-powerup-queue-chip button:hover{color:var(--md-error);background:rgba(179,38,30,0.1)}
+.uets-powerup-footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:12px 24px 20px;border-top:1px solid var(--md-outline-variant)}
+.uets-powerup-count{font-size:13px;color:var(--md-on-surface-variant)}
+.uets-powerup-actions{display:flex;gap:8px;flex-wrap:wrap}
   `)
 
   // === WELCOME POPUP FOR NEW USERS ===
@@ -339,6 +382,256 @@
       /\/_gameapi\/main\/public\/v1\/games\/[^/]+\/proceed/.test(url) ||
       (url.includes("play-api") && /proceedGame|soloProceed/.test(url))
     );
+  };
+
+  const isReplacePowerupsUrl = (url) =>
+    typeof url === "string" &&
+    /\/_gameapi\/main\/public\/v1\/games\/[^/]+\/replace-powerups/.test(url);
+
+  const buildPowerupAwardEntry = (name, beltPosition, templateMeta) => ({
+    name,
+    meta: {
+      questionId: templateMeta?.questionId ?? "",
+      attempt: templateMeta?.attempt ?? -1,
+      questionNum: templateMeta?.questionNum ?? 0,
+      beltPosition,
+    },
+  });
+
+  const applyPowerupSelection = (body, selectedNames) => {
+    const templateMeta = body.award?.[0]?.meta;
+    return {
+      ...body,
+      award: selectedNames.map((name, i) => buildPowerupAwardEntry(name, i, templateMeta)),
+    };
+  };
+
+  let powerupPickerActive = false;
+
+  const showPowerupPickerModal = (body) => {
+    if (powerupPickerActive) {
+      return Promise.resolve(body);
+    }
+    powerupPickerActive = true;
+
+    return new Promise((resolve) => {
+      const savedPreset = GM_getValue(POWERUP_PRESET_KEY, null);
+      const defaultSelected = Array.isArray(savedPreset) && savedPreset.length
+        ? savedPreset
+        : (body.award || []).map((a) => a.name).filter(Boolean);
+      const selected = [...defaultSelected];
+
+      const overlay = document.createElement("div");
+      overlay.className = "uets-powerup-overlay";
+
+      const modal = document.createElement("div");
+      modal.className = "uets-powerup-modal";
+
+      const headerEl = document.createElement("div");
+      headerEl.className = "uets-powerup-header";
+      const titleEl = document.createElement("div");
+      titleEl.className = "uets-powerup-title";
+      titleEl.textContent = "Choose your powerups";
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "uets-config-close uets-powerup-close";
+      closeBtn.setAttribute("aria-label", "Close");
+      headerEl.append(titleEl, closeBtn);
+
+      const subtitle = document.createElement("div");
+      subtitle.className = "uets-powerup-subtitle";
+      subtitle.textContent =
+        "Click to add (duplicates allowed). Right-click a tile to remove one. Belt order is left-to-right below.";
+
+      const queueWrapEl = document.createElement("div");
+      queueWrapEl.className = "uets-powerup-queue-wrap";
+      const queueLabel = document.createElement("div");
+      queueLabel.className = "uets-powerup-queue-label";
+      queueLabel.textContent = "Your belt";
+      const queueEl = document.createElement("div");
+      queueEl.className = "uets-powerup-queue";
+      queueWrapEl.append(queueLabel, queueEl);
+
+      const grid = document.createElement("div");
+      grid.className = "uets-powerup-grid";
+
+      const footer = document.createElement("div");
+      footer.className = "uets-powerup-footer";
+      const countEl = document.createElement("div");
+      countEl.className = "uets-powerup-count";
+      const actions = document.createElement("div");
+      actions.className = "uets-powerup-actions";
+
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "uets-outlined-button uets-powerup-clear";
+      clearBtn.textContent = "Clear";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "uets-text-button uets-powerup-cancel";
+      cancelBtn.textContent = "Use shuffle roll";
+
+      const confirmBtn = document.createElement("button");
+      confirmBtn.type = "button";
+      confirmBtn.className = "uets-filled-button uets-powerup-confirm";
+      confirmBtn.textContent = "Confirm";
+
+      actions.append(clearBtn, cancelBtn, confirmBtn);
+      footer.append(countEl, actions);
+      modal.append(headerEl, subtitle, queueWrapEl, grid, footer);
+      overlay.append(modal);
+
+      const powerupByName = Object.fromEntries(WAYGROUND_POWERUPS.map((p) => [p.name, p]));
+
+      const countFor = (name) => selected.filter((n) => n === name).length;
+
+      const updateCount = () => {
+        const n = selected.length;
+        countEl.textContent = `${n} on belt`;
+        confirmBtn.disabled = n === 0;
+        confirmBtn.style.opacity = n === 0 ? "0.5" : "1";
+      };
+
+      const renderQueue = () => {
+        queueEl.replaceChildren();
+        selected.forEach((name, index) => {
+          const powerup = powerupByName[name];
+          if (!powerup) {
+            return;
+          }
+          const chip = document.createElement("div");
+          chip.className = "uets-powerup-queue-chip";
+          chip.title = `${index + 1}. ${powerup.label}`;
+
+          const img = document.createElement("img");
+          img.src = powerup.img;
+          img.alt = powerup.label;
+
+          const text = document.createElement("span");
+          text.textContent = powerup.label;
+
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.setAttribute("aria-label", `Remove ${powerup.label}`);
+          removeBtn.textContent = "×";
+          removeBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            selected.splice(index, 1);
+            syncUi();
+          });
+
+          chip.append(img, text, removeBtn);
+          queueEl.append(chip);
+        });
+        updateCount();
+      };
+
+      const syncTiles = () => {
+        grid.querySelectorAll(".uets-powerup-tile").forEach((tile) => {
+          const name = tile.dataset.name;
+          const count = countFor(name);
+          tile.classList.toggle("selected", count > 0);
+          const badge = tile.querySelector(".uets-powerup-tile-count");
+          if (badge) {
+            badge.textContent = count > 0 ? String(count) : "";
+            badge.hidden = count === 0;
+          }
+        });
+      };
+
+      const syncUi = () => {
+        renderQueue();
+        syncTiles();
+      };
+
+      WAYGROUND_POWERUPS.forEach((powerup) => {
+        const tile = document.createElement("button");
+        tile.type = "button";
+        tile.className = "uets-powerup-tile";
+        tile.dataset.name = powerup.name;
+
+        const badge = document.createElement("span");
+        badge.className = "uets-powerup-tile-count";
+        badge.hidden = true;
+
+        const img = document.createElement("img");
+        img.src = powerup.img;
+        img.alt = powerup.label;
+        img.loading = "lazy";
+
+        const label = document.createElement("div");
+        label.className = "uets-powerup-tile-label";
+        label.textContent = powerup.label;
+
+        tile.append(badge, img, label);
+        tile.addEventListener("click", () => {
+          selected.push(powerup.name);
+          syncUi();
+        });
+        tile.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          const idx = selected.lastIndexOf(powerup.name);
+          if (idx !== -1) {
+            selected.splice(idx, 1);
+            syncUi();
+          }
+        });
+        grid.append(tile);
+      });
+
+      const finish = (result) => {
+        powerupPickerActive = false;
+        overlay.remove();
+        resolve(result);
+      };
+
+      clearBtn.addEventListener("click", () => {
+        selected.length = 0;
+        syncUi();
+      });
+
+      const useOriginal = () => finish(body);
+      cancelBtn.addEventListener("click", useOriginal);
+      closeBtn.addEventListener("click", useOriginal);
+
+      confirmBtn.addEventListener("click", () => {
+        if (!selected.length) {
+          return;
+        }
+        GM_setValue(POWERUP_PRESET_KEY, [...selected]);
+        GM_log(`[+] Powerup shuffle replaced with: ${selected.join(", ")}`);
+        finish(applyPowerupSelection(body, selected));
+      });
+
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) {
+          useOriginal();
+        }
+      });
+
+      syncUi();
+      document.body.append(overlay);
+    });
+  };
+
+  const handleReplacePowerupsRequest = (bodyStr) => {
+    if (!sharedState.config.enablePowerupPicker) {
+      return Promise.resolve(bodyStr);
+    }
+    try {
+      const body = JSON.parse(bodyStr);
+      if (sharedState.config.powerupPickerAutoApply) {
+        const preset = GM_getValue(POWERUP_PRESET_KEY, null);
+        if (Array.isArray(preset) && preset.length) {
+          return Promise.resolve(JSON.stringify(applyPowerupSelection(body, preset)));
+        }
+      }
+      return showPowerupPickerModal(body).then((modified) => JSON.stringify(modified));
+    } catch (e) {
+      GM_log("[!] Powerup picker failed:", e);
+      return Promise.resolve(bodyStr);
+    }
   };
 
   const processProceedGameResponse = (data) => {
@@ -710,6 +1003,26 @@
           </div>
           <input type="number" class="uets-config-input" id="reactionSpamDelay" min="50" max="1000">
         </div>
+        <div class="uets-config-item">
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="When you click Shuffle in the powerup lobby, opens a picker so you can choose which powerups to request instead of random ones." title="Info"></button>
+            <label class="uets-config-label">Powerup shuffle picker</label>
+          </div>
+          <label class="uets-switch">
+            <input type="checkbox" id="enablePowerupPicker">
+            <span class="uets-switch-slider"></span>
+          </label>
+        </div>
+        <div class="uets-config-item">
+          <div class="uets-config-label-container">
+            <button class="uets-config-info" data-info="Skip the picker and instantly apply your last confirmed powerup selection on every shuffle." title="Info"></button>
+            <label class="uets-config-label">Auto-apply saved powerups</label>
+          </div>
+          <label class="uets-switch">
+            <input type="checkbox" id="powerupPickerAutoApply">
+            <span class="uets-switch-slider"></span>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -907,6 +1220,8 @@
       document.getElementById('enableReactionSpam').checked = sharedState.config.enableReactionSpam;
       document.getElementById('reactionSpamCount').value = sharedState.config.reactionSpamCount;
       document.getElementById('reactionSpamDelay').value = sharedState.config.reactionSpamDelay;
+      document.getElementById('enablePowerupPicker').checked = sharedState.config.enablePowerupPicker;
+      document.getElementById('powerupPickerAutoApply').checked = sharedState.config.powerupPickerAutoApply;
 
       // Set active profile button
       const profileButtons = gui.querySelectorAll('.uets-profile-button');
@@ -1008,6 +1323,8 @@
       sharedState.config.enableReactionSpam = document.getElementById('enableReactionSpam').checked;
       sharedState.config.reactionSpamCount = parseInt(document.getElementById('reactionSpamCount').value);
       sharedState.config.reactionSpamDelay = parseInt(document.getElementById('reactionSpamDelay').value);
+      sharedState.config.enablePowerupPicker = document.getElementById('enablePowerupPicker').checked;
+      sharedState.config.powerupPickerAutoApply = document.getElementById('powerupPickerAutoApply').checked;
 
       saveConfig();
       closeConfigGui();
@@ -3062,6 +3379,14 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       }
     }
 
+    // Intercept replace-powerups shuffle and let user pick powerups
+    if (this._method === "POST" && isReplacePowerupsUrl(this._url) && isWaygroundQuizizz && typeof data === "string") {
+      handleReplacePowerupsRequest(data).then((modified) => {
+        originalXMLHttpRequestSend.call(this, modified);
+      });
+      return;
+    }
+
     // Intercept requests to reaction-update and resend
     const isReactionUpdate = isWaygroundQuizizz && this._url?.includes("_gameapi/main/public/v1/games/") && this._url?.includes("/reaction-update");
     if (this._method === "POST" && isReactionUpdate && sharedState.config.enableReactionSpam) {
@@ -3143,7 +3468,15 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       return result;
     }
 
-    console.log(urlString);
+    // Intercept replace-powerups shuffle via fetch
+    if (isReplacePowerupsUrl(urlString) && isWaygroundQuizizz && options?.method === "POST" && options.body) {
+      const bodyStr = typeof options.body === "string" ? options.body : null;
+      if (bodyStr) {
+        return handleReplacePowerupsRequest(bodyStr).then((modified) =>
+          originalFetch.call(this, url, { ...options, body: modified })
+        );
+      }
+    }
 
     const isQuizJoinUrl = (
       (urlString.includes("play-api") && /soloJoin|rejoinGame|join/.test(urlString))
@@ -3151,7 +3484,6 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       // new path used by Wayground when you re‑enter a game
       || /\/_gameapi\/main\/public\/v1\/games\/[^\/]+\/rejoin/.test(urlString)
     );
-    console.log(isQuizJoinUrl);
 
     if (isQuizJoinUrl && isWaygroundQuizizz) {
       return originalFetch.call(this, url, options).then(response => {
