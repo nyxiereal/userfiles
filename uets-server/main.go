@@ -523,15 +523,20 @@ func setupSocketIO() *sio.Server {
 
 			// Replay existing answer counts to the newly joined client
 			stateMu.RLock()
-			rooms, exists := gameRooms[gameID]
-			stateMu.RUnlock()
-			if exists {
-				for qi, counts := range rooms {
-					client.Emit("answer_counts", map[string]interface{}{
-						"questionIndex": qi,
-						"counts":        counts,
-					})
+			snapshot := make(map[int]map[int]int, len(gameRooms[gameID]))
+			for qi, src := range gameRooms[gameID] {
+				cp := make(map[int]int, len(src))
+				for k, v := range src {
+					cp[k] = v
 				}
+				snapshot[qi] = cp
+			}
+			stateMu.RUnlock()
+			for qi, counts := range snapshot {
+				client.Emit("answer_counts", map[string]interface{}{
+					"questionIndex": qi,
+					"counts":        counts,
+				})
 			}
 		})
 
@@ -574,7 +579,11 @@ func setupSocketIO() *sio.Server {
 					gameRooms[gameID][questionIndex][ci]++
 				}
 			}
-			counts := gameRooms[gameID][questionIndex]
+			src := gameRooms[gameID][questionIndex]
+			counts := make(map[int]int, len(src))
+			for k, v := range src {
+				counts[k] = v
+			}
 			stateMu.Unlock()
 
 			io.To(sio.Room(gameID)).Emit("answer_counts", map[string]interface{}{
