@@ -351,6 +351,11 @@ func handleQuestionEndpoint(w http.ResponseWriter, r *http.Request) {
 	writeQuestionResponse(w, q, questionType)
 }
 
+// GET /health
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]string{"status": "ok"}, http.StatusOK)
+}
+
 // GET /int/stats
 func handleStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -688,6 +693,9 @@ func main() {
 
 	// Socket.IO (handles its own CORS)
 	mux.Handle("/api/socket.io/", io.ServeHandler(nil))
+
+	// Health check
+	mux.HandleFunc("/health", handleHealth)
 
 	// Internal management API
 	mux.HandleFunc("/int/stats", handleStats)

@@ -1494,133 +1494,92 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
 `;
   };
 
+  const handleAIResponse = (responseText, options, providerName = "AI") => {
+    GM_log(`[+] ${providerName} API Response:`, responseText);
+    showResponsePopup(responseText, false, "AI Assistant");
+
+    if (options && options.length > 0) {
+      const parsedAnswers = parseAiResponseForAnswers(responseText, options);
+      if (parsedAnswers && parsedAnswers.length > 0) {
+        GM_log(`[+] Auto-highlighting answers: ${parsedAnswers.join(', ')}`);
+        const questionType = parsedAnswers.length > 1 ? 'MSQ' : 'MCQ';
+        setTimeout(() => {
+          highlightCorrectAnswers(
+            parsedAnswers.length > 1 ? parsedAnswers : parsedAnswers[0],
+            questionType, false, false,
+          );
+        }, 300);
+      }
+    }
+  };
+
+  const extractAIText = (result, provider) => {
+    if (provider === "Gemini") return result.candidates?.[0]?.content?.parts?.[0]?.text || null;
+    if (provider === "OpenRouter") return result.choices?.[0]?.message?.content || null;
+    return null;
+  };
+
+  const sendAIRequest = (url, headers, payload, options, providerName) => {
+    showResponsePopup("Loading AI insights...", true, "AI Assistant");
+
+    GM_xmlhttpRequest({
+      method: "POST",
+      url,
+      headers,
+      data: JSON.stringify(payload),
+      onload: (response) => {
+        try {
+          const result = JSON.parse(response.responseText);
+          if (result.error) {
+            showResponsePopup(`${providerName} API Error: ${result.error.message || result.error}`, false, "AI Assistant");
+            return;
+          }
+          const text = extractAIText(result, providerName);
+          if (text) {
+            handleAIResponse(text, options, providerName);
+          } else {
+            showResponsePopup(`${providerName} API Error: Could not parse a valid response.`, false, "AI Assistant");
+          }
+        } catch (e) {
+          showResponsePopup(`${providerName} API Error: Failed to parse response.\n${e.message}`, false, "AI Assistant");
+        }
+      },
+      onerror: (response) => showResponsePopup(`${providerName} API Error: Request failed. Status: ${response.status}`, false, "AI Assistant"),
+      ontimeout: () => showResponsePopup(`${providerName} API Error: Request timed out.`, false, "AI Assistant"),
+    });
+  };
+
   const askGemini = async (question, options, imageData, platform = "quiz") => {
     const apiKey = await getApiKey();
     if (!apiKey) return;
 
-    const promptText = buildGeminiPrompt(
-      question,
-      options,
-      !!imageData,
-      platform,
-    );
+    const promptText = buildGeminiPrompt(question, options, !!imageData, platform);
     const model = sharedState.config.geminiModel || 'gemini-flash-lite-latest';
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    const requestPayloadContents = [{ parts: [{ text: promptText }] }];
-    if (sharedState.config.includeImages && imageData && imageData.base64Data && imageData.mimeType) {
-      requestPayloadContents[0].parts.push({
-        inline_data: {
-          mime_type: imageData.mimeType,
-          data: imageData.base64Data,
-        },
-      });
+    const parts = [{ text: promptText }];
+    if (sharedState.config.includeImages && imageData?.base64Data && imageData?.mimeType) {
+      parts.push({ inline_data: { mime_type: imageData.mimeType, data: imageData.base64Data } });
     }
 
-    const apiPayload = {
-      contents: requestPayloadContents,
+    const payload = {
+      contents: [{ parts }],
       generationConfig: {
         temperature: sharedState.config.temperature,
         topP: sharedState.config.topP,
         topK: sharedState.config.topK,
         maxOutputTokens: sharedState.config.maxOutputTokens,
-        thinkingConfig: {
-          thinkingBudget: sharedState.config.geminiThinkingBudget || 512,
-        },
+        thinkingConfig: { thinkingBudget: sharedState.config.geminiThinkingBudget || 512 },
       },
       safetySettings: [
-        {
-          category: "HARM_CATEGORY_HARASSMENT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE",
-        },
-        {
-          category: "HARM_CATEGORY_HATE_SPEECH",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE",
-        },
-        {
-          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE",
-        },
-        {
-          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-          threshold: "BLOCK_MEDIUM_AND_ABOVE",
-        },
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
       ],
     };
 
-    showResponsePopup("Loading AI insights...", true, "AI Assistant");
-
-    GM_xmlhttpRequest({
-      method: "POST",
-      url: apiUrl,
-      headers: { "Content-Type": "application/json" },
-      data: JSON.stringify(apiPayload),
-      onload: (response) => {
-        try {
-          const result = JSON.parse(response.responseText);
-          if (
-            result.candidates &&
-            result.candidates.length > 0 &&
-            result.candidates[0].content &&
-            result.candidates[0].content.parts &&
-            result.candidates[0].content.parts.length > 0
-          ) {
-            const geminiText = result.candidates[0].content.parts[0].text;
-            GM_log("[+] Gemini API Response:", geminiText);
-            showResponsePopup(geminiText, false, "AI Assistant");
-
-            // Try to parse and highlight answers automatically
-            if (options && options.length > 0) {
-              const parsedAnswers = parseAiResponseForAnswers(geminiText, options);
-              if (parsedAnswers && parsedAnswers.length > 0) {
-                GM_log(`[+] Auto-highlighting answers: ${parsedAnswers.join(', ')}`);
-                const questionType = parsedAnswers.length > 1 ? 'MSQ' : 'MCQ';
-                setTimeout(() => {
-                  highlightCorrectAnswers(
-                    parsedAnswers.length > 1 ? parsedAnswers : parsedAnswers[0],
-                    questionType,
-                    false,
-                    false,
-                  );
-                }, 300);
-              }
-            }
-          } else if (result.error) {
-            GM_log("[!] Gemini API Error:", result.error.message);
-            showResponsePopup(
-              `Gemini API Error: ${result.error.message}`,
-              false,
-              "AI Assistant",
-            );
-          } else {
-            showResponsePopup(
-              "Gemini API Error: Could not parse a valid response.",
-              false,
-              "AI Assistant",
-            );
-          }
-        } catch (e) {
-          showResponsePopup(
-            "Gemini API Error: Failed to parse response.\n" + e.message,
-            false,
-            "AI Assistant",
-          );
-        }
-      },
-      onerror: (response) => {
-        showResponsePopup(
-          `Gemini API Error: Request failed. Status: ${response.status}`,
-          false,
-          "AI Assistant",
-        );
-      },
-      ontimeout: () =>
-        showResponsePopup(
-          "Gemini API Error: Request timed out.",
-          false,
-          "AI Assistant",
-        ),
-    });
+    sendAIRequest(url, { "Content-Type": "application/json" }, payload, options, "Gemini");
   };
 
   const askOpenRouter = async (question, options, imageData, platform = "quiz") => {
@@ -1630,125 +1589,33 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       return;
     }
 
-    const promptText = buildGeminiPrompt(
-      question,
-      options,
-      !!imageData,
-      platform,
-    );
-    const apiUrl = "https://openrouter.ai/api/v1/chat/completions";
+    const promptText = buildGeminiPrompt(question, options, !!imageData, platform);
+    const url = "https://openrouter.ai/api/v1/chat/completions";
     const model = sharedState.config.openrouterModel || "x-ai/grok-4.1-fast";
 
-    const messages = [
-      {
-        role: "user",
-        content: []
-      }
-    ];
-
-    // Add text content
-    messages[0].content.push({
-      type: "text",
-      text: promptText
-    });
-
-    // Add image if available
-    if (sharedState.config.includeImages && imageData && imageData.base64Data && imageData.mimeType) {
-      messages[0].content.push({
-        type: "image_url",
-        image_url: {
-          url: `data:${imageData.mimeType};base64,${imageData.base64Data}`
-        }
-      });
+    const content = [{ type: "text", text: promptText }];
+    if (sharedState.config.includeImages && imageData?.base64Data && imageData?.mimeType) {
+      content.push({ type: "image_url", image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64Data}` } });
     }
 
-    // Build reasoning config based on model
     const usesEffort = OPENROUTER_EFFORT_MODELS.has(model);
-    const reasoningConfig = usesEffort
-      ? { effort: sharedState.config.openrouterReasoningEffort || 'medium' }
-      : { max_tokens: sharedState.config.openrouterReasoningMaxTokens || 2000 };
-
-    const apiPayload = {
-      model: model,
-      messages: messages,
+    const payload = {
+      model,
+      messages: [{ role: "user", content }],
       temperature: sharedState.config.temperature,
       top_p: sharedState.config.topP,
       max_tokens: sharedState.config.openrouterMaxTokens || 2048,
-      reasoning: reasoningConfig
+      reasoning: usesEffort
+        ? { effort: sharedState.config.openrouterReasoningEffort || 'medium' }
+        : { max_tokens: sharedState.config.openrouterReasoningMaxTokens || 2000 },
     };
 
-    showResponsePopup("Loading AI insights...", true, "AI Assistant");
-
-    GM_xmlhttpRequest({
-      method: "POST",
-      url: apiUrl,
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-        "HTTP-Referer": window.location.href,
-        "X-Title": "UETS - Universal Educational Tool Suite"
-      },
-      data: JSON.stringify(apiPayload),
-      onload: (response) => {
-        try {
-          const result = JSON.parse(response.responseText);
-          if (result.choices && result.choices.length > 0 && result.choices[0].message) {
-            const aiText = result.choices[0].message.content;
-            GM_log("[+] OpenRouter API Response:", aiText);
-            showResponsePopup(aiText, false, "AI Assistant");
-
-            // Try to parse and highlight answers automatically
-            if (options && options.length > 0) {
-              const parsedAnswers = parseAiResponseForAnswers(aiText, options);
-              if (parsedAnswers && parsedAnswers.length > 0) {
-                GM_log(`[+] Auto-highlighting answers: ${parsedAnswers.join(', ')}`);
-                const questionType = parsedAnswers.length > 1 ? 'MSQ' : 'MCQ';
-                setTimeout(() => {
-                  highlightCorrectAnswers(
-                    parsedAnswers.length > 1 ? parsedAnswers : parsedAnswers[0],
-                    questionType,
-                    false,
-                    false,
-                  );
-                }, 300);
-              }
-            }
-          } else if (result.error) {
-            GM_log("[!] OpenRouter API Error:", result.error.message || result.error);
-            showResponsePopup(
-              `OpenRouter API Error: ${result.error.message || result.error}`,
-              false,
-              "AI Assistant",
-            );
-          } else {
-            showResponsePopup(
-              "OpenRouter API Error: Could not parse a valid response.",
-              false,
-              "AI Assistant",
-            );
-          }
-        } catch (e) {
-          showResponsePopup(
-            "OpenRouter API Error: Failed to parse response.\n" + e.message,
-            false,
-            "AI Assistant",
-          );
-        }
-      },
-      onerror: (response) => {
-        showResponsePopup(
-          `OpenRouter API Error: Request failed. Status: ${response.status}`,
-          false,
-          "AI Assistant",
-        );
-      },
-      ontimeout: () =>
-        showResponsePopup(
-          "OpenRouter API Error: Request timed out.",
-          false,
-          "AI Assistant",
-        ),
-    });
+    sendAIRequest(url, {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+      "HTTP-Referer": window.location.href,
+      "X-Title": "UETS - Universal Educational Tool Suite",
+    }, payload, options, "OpenRouter");
   };
 
   // === PARSE AI RESPONSE FOR ANSWER HIGHLIGHTING ===
@@ -1893,7 +1760,6 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
   const updateToggleButtonAppearance = () => {
     if (!sharedState.toggleButton) return;
     if (sharedState.uiModificationsEnabled) {
-      sharedState.toggleButton.innerHTML = "";
       sharedState.toggleButton.style.fontFamily = "'Material Icons Outlined'";
       sharedState.toggleButton.style.fontSize = "24px";
       sharedState.toggleButton.style.setProperty("--icon", "'close'");
@@ -1901,7 +1767,6 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       sharedState.toggleButton.title = "Hide Tool Modifications";
       sharedState.toggleButton.classList.remove("uets-mods-hidden-state");
     } else {
-      sharedState.toggleButton.innerHTML = "";
       sharedState.toggleButton.style.fontFamily = "'Material Icons Outlined'";
       sharedState.toggleButton.style.fontSize = "24px";
       sharedState.toggleButton.style.setProperty("--icon", "'add'");
@@ -3373,7 +3238,9 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     const isWaygroundQuizizz = this._url?.includes("wayground.com") || this._url?.includes("quizizz.com");
     if (this._method === "POST" && isProceed && isWaygroundQuizizz && data) {
       try {
-        return originalXMLHttpRequestSend.call(this, JSON.stringify(processProceedGameRequest(JSON.parse(data))));
+        const delayedBody = JSON.stringify(processProceedGameRequest(JSON.parse(data)));
+        setTimeout(() => originalXMLHttpRequestSend.call(this, delayedBody), Math.random() * 400 + 100);
+        return;
       } catch (e) {
         GM_log("[!] Failed to parse/modify proceedGame request:", e);
       }
@@ -3382,7 +3249,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     // Intercept replace-powerups shuffle and let user pick powerups
     if (this._method === "POST" && isReplacePowerupsUrl(this._url) && isWaygroundQuizizz && typeof data === "string") {
       handleReplacePowerupsRequest(data).then((modified) => {
-        originalXMLHttpRequestSend.call(this, modified);
+        setTimeout(() => originalXMLHttpRequestSend.call(this, modified), Math.random() * 400 + 100);
       });
       return;
     }
@@ -3452,7 +3319,8 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     const isProceedUrl = isWaygroundProceedUrl(urlString);
     if (isProceedUrl && isWaygroundQuizizz && options?.method === "POST" && options.body) {
       try {
-        return originalFetch.call(this, url, { ...options, body: JSON.stringify(processProceedGameRequest(JSON.parse(options.body))) });
+        const modifiedBody = JSON.stringify(processProceedGameRequest(JSON.parse(options.body)));
+        return new Promise(resolve => setTimeout(() => resolve(originalFetch.call(this, url, { ...options, body: modifiedBody })), Math.random() * 400 + 100));
       } catch (e) {
         GM_log("[!] Failed to parse/modify proceedGame fetch request:", e);
       }
@@ -3473,7 +3341,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       const bodyStr = typeof options.body === "string" ? options.body : null;
       if (bodyStr) {
         return handleReplacePowerupsRequest(bodyStr).then((modified) =>
-          originalFetch.call(this, url, { ...options, body: modified })
+          new Promise(resolve => setTimeout(() => resolve(originalFetch.call(this, url, { ...options, body: modified })), Math.random() * 400 + 100))
         );
       }
     }
