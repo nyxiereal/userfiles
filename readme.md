@@ -42,3 +42,9 @@ OR
 3. Run `docker compose up -d`
 4. The server will be running at `http://localhost:5000`, all answers will be stored in `data/quiz_data.db`. Logs will be stored in `uets-server.log`. Websocket commections are handled filelessly.
 5. Now you can open the web interface at `http://localhost:5000`. Set the same URL in the userscript settings.
+
+## Roperunner
+
+Cheat for zawodowe.edu.pl
+
+Requires an openrouter api key - configured when you open the site
