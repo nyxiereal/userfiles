@@ -9,8 +9,6 @@
 // @match        https://wayground.com/*
 // @match        https://*.quizizz.com/*
 // @match        https://*.wayground.com/*
-// @match        https://*.testportal.net/*
-// @match        https://*.testportal.pl/*
 // @match        https://docs.google.com/forms/*
 // @match        *://kahoot.it/*
 // @grant        GM_addStyle

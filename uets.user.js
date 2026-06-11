@@ -9,8 +9,6 @@
 // @match        https://wayground.com/*
 // @match        https://*.quizizz.com/*
 // @match        https://*.wayground.com/*
-// @match        https://*.testportal.net/*
-// @match        https://*.testportal.pl/*
 // @match        https://docs.google.com/forms/*
 // @match        *://kahoot.it/*
 // @grant        GM_addStyle
@@ -137,7 +135,6 @@
     elementsToCleanup: [],
     observer: null,
     currentDomain: window.location.hostname,
-    originalRegExpTest: RegExp.prototype.test,
     quizData: {},
     currentQuestionId: null,
     questionsPool: {},
@@ -159,7 +156,7 @@
 
   // === SHARED STYLES ===
   GM_addStyle(`
-  @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap');@import url('https://fonts.googleapis.com/icon?family=Material+Icons+Outlined');:root{--md-primary:#6750A4;--md-primary-container:#EADDFF;--md-on-primary:#FFFFFF;--md-on-primary-container:#21005D;--md-secondary:#625B71;--md-secondary-container:#E8DEF8;--md-on-secondary:#FFFFFF;--md-on-secondary-container:#1D192B;--md-tertiary:#7D5260;--md-tertiary-container:#FFD8E4;--md-on-tertiary:#FFFFFF;--md-on-tertiary-container:#31111D;--md-surface:#FEF7FF;--md-surface-dim:#DED8E1;--md-surface-bright:#FEF7FF;--md-surface-container-lowest:#FFFFFF;--md-surface-container-low:#F7F2FA;--md-surface-container:#F1ECF4;--md-surface-container-high:#ECE6F0;--md-surface-container-highest:#E6E0E9;--md-on-surface:#1C1B1F;--md-on-surface-variant:#49454F;--md-outline:#79747E;--md-outline-variant:#CAC4D0;--md-error:#B3261E;--md-error-container:#F9DEDC;--md-on-error:#FFFFFF;--md-on-error-container:#410E0B;--md-shadow:#000000}.uets-card{background:var(--md-surface-container);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);overflow:hidden;font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-elevated-card{background:var(--md-surface-container-low);border-radius:12px;box-shadow:0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);overflow:hidden;font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-filled-button{background:var(--md-primary);color:var(--md-on-primary);border:none;border-radius:20px;padding:10px 24px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-filled-button:hover{box-shadow:0 2px 4px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);transform:translateY(-1px)}.uets-filled-button:active{transform:translateY(0px);box-shadow:0 1px 2px rgba(0,0,0,0.12)}.uets-outlined-button{background:transparent;color:var(--md-primary);border:1px solid var(--md-outline);border-radius:20px;padding:10px 24px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-outlined-button:hover{background:rgba(103, 80, 164, 0.08);border-color:var(--md-primary)}.uets-text-button{background:transparent;color:var(--md-primary);border:none;border-radius:20px;padding:10px 12px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-text-button:hover{background:rgba(103, 80, 164, 0.08)}.uets-fab{background:var(--md-primary-container);color:var(--md-on-primary-container);border:none;border-radius:16px;width:56px;height:56px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.2), 0 6px 10px rgba(0,0,0,0.14), 0 1px 18px rgba(0,0,0,0.12);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);font-size:24px}.uets-fab:hover{box-shadow:0 5px 5px rgba(0,0,0,0.2), 0 9px 18px rgba(0,0,0,0.14), 0 3px 14px rgba(0,0,0,0.12);transform:scale(1.05)}.uets-fab.uets-mods-hidden-state{background:transparent;box-shadow:none}.uets-fab.uets-mods-hidden-state:hover{background:rgba(103, 80, 164, 0.08);box-shadow:none;transform:scale(1.05)}.uets-success-button{background:#a6e3a1;color:white}.uets-warning-button{background:#fab387;color:white}.uets-purple-button{background:#cba6f7;color:white}.uets-ai-button,.uets-copy-prompt-button,.uets-ddg-button,.uets-ddg-link,.uets-gemini-button,.uets-get-answer-button{display:inline-flex;align-items:center;gap:8px;padding:4px 8px;color:var(--md-on-primary);text-decoration:none;border-radius:20px;font-size:14px;font-weight:500;cursor:pointer;text-align:center;vertical-align:middle;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);border:none;font-family:'Roboto', sans-serif;min-height:40px;margin:1px;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)}.uets-ai-button:hover,.uets-copy-prompt-button:hover,.uets-ddg-button:hover,.uets-ddg-link:hover,.uets-gemini-button:hover,.uets-get-answer-button:hover{box-shadow:0 4px 8px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.1);transform:translateY(-2px)}.uets-ddg-button,.uets-ddg-link{background:#a6e3a1 !important;color:white !important}.uets-ai-button,.uets-gemini-button{background:#74c7ec !important;color:white !important}.uets-copy-prompt-button{background:#fab387 !important;color:white !important}.uets-get-answer-button{background:#cba6f7 !important;color:white !important}.uets-ddg-button::before,.uets-ddg-link::before{content:'search';font-family:'Material Icons Outlined';font-size:18px}.uets-ai-button::before,.uets-gemini-button::before{content:'psychology';font-family:'Material Icons Outlined';font-size:18px}.uets-copy-prompt-button::before{content:'content_copy';font-family:'Material Icons Outlined';font-size:18px}.uets-get-answer-button::before{content:'lightbulb';font-family:'Material Icons Outlined';font-size:18px}.uets-option-wrapper{display:flex;flex-direction:column;align-items:stretch;justify-content:space-between;height:100%}.uets-option-wrapper > button.option{display:flex;flex-direction:column;flex-grow:1;min-height:0;width:100%}.uets-ddg-link-option-item{width:100%;box-sizing:border-box;margin-top:12px;padding:8px 0;border-radius:0 0 12px 12px;flex-shrink:0}.uets-main-question-buttons-container{display:flex;justify-content:center;gap:4px;background:#313244;border-radius:12px;margin:1px;flex-wrap:wrap;padding:2px}.uets-response-popup{position:fixed;top:20px;right:20px;background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:12px;padding:16px 20px;z-index:10004;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;font-size:14px;line-height:20px;animation:slideInRight 0.3s ease-out;cursor:pointer;display:flex;align-items:flex-start;gap:12px}@keyframes slideInRight{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes slideOutRight{from{transform:translateX(0);opacity:1}to{transform:translateX(400px);opacity:0}}.uets-response-popup.uets-toast-dismiss{animation:slideOutRight 0.3s ease-in forwards}.uets-response-popup-header{display:none}.uets-response-popup-content{white-space:normal;font-size:14px;line-height:20px;color:var(--md-on-surface);padding:0;max-height:none;overflow:visible;flex:1}.uets-response-popup-close{background:none;border:none;width:24px;height:24px;border-radius:12px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:20px;padding:0;flex-shrink:0}.uets-response-popup-close::before{content:'close'}.uets-response-popup-close:hover{background:rgba(103, 80, 164, 0.08);color:var(--md-primary)}.uets-response-popup-loading{text-align:center;font-style:normal;color:var(--md-on-surface-variant);padding:0;font-size:14px;display:flex;flex-direction:column;align-items:center;gap:8px}.uets-welcome-popup{position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:28px;padding:0;z-index:10004;min-width:320px;max-width:90vh;max-height:80vh;overflow:hidden;box-shadow:0 10px 25px rgba(0,0,0,0.35), 0 6px 10px rgba(0,0,0,0.25);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif !important;font-size:18px}.uets-response-popup-header{display:flex;justify-content:space-between;align-items:center;padding:24px 24px 0;margin-bottom:16px}.uets-response-popup-title{font-weight:600;font-size:22px;color:var(--md-on-surface);line-height:28px}.uets-response-popup-close{background:none;border:none;width:48px;height:48px;border-radius:24px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:24px}.uets-response-popup-close::before{content:'close'}.uets-response-popup-close:hover{background:rgba(103, 80, 164, 0.08);color:var(--md-primary)}.uets-response-popup-content{white-space:pre-wrap;font-size:14px;line-height:20px;color:var(--md-on-surface);padding:0 24px 24px;max-height:calc(80vh - 120px);overflow-y:auto}.uets-response-popup-content b,.uets-response-popup-content strong{color:var(--md-primary);font-weight:600}.uets-response-popup-loading{text-align:center;font-style:normal;color:var(--md-on-surface-variant);padding:40px 24px;font-size:16px;display:flex;flex-direction:column;align-items:center;gap:16px}.uets-loading-spinner{width:32px;height:32px;border:3px solid var(--md-outline-variant);border-top:3px solid var(--md-primary);border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}#uets-toggle-ui-button{position:fixed;bottom:20px;left:20px;z-index:10002;background:var(--md-primary-container);color:var(--md-on-primary-container);border:none;border-radius:16px;width:56px;height:56px;cursor:pointer;box-shadow:0 3px 5px rgba(0,0,0,0.2), 0 6px 10px rgba(0,0,0,0.14), 0 1px 18px rgba(0,0,0,0.12);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);user-select:none;display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:24px}#uets-toggle-ui-button:hover{box-shadow:0 5px 5px rgba(0,0,0,0.2), 0 9px 18px rgba(0,0,0,0.14), 0 3px 14px rgba(0,0,0,0.12);transform:scale(1.05)}#uets-toggle-ui-button.uets-mods-hidden-state{background:transparent;box-shadow:none}#uets-toggle-ui-button.uets-mods-hidden-state:hover{background:rgba(103, 80, 164, 0.08);box-shadow:none}.uets-correct-answer{background:rgba(76, 175, 80, 0.2) !important;border:3px solid #4CAF50 !important;border-radius:12px !important;box-shadow:0 0 12px rgba(76, 175, 80, 0.5), inset 0 0 8px rgba(76, 175, 80, 0.15) !important;animation:uets-correct-pulse 2s ease-in-out infinite !important}@keyframes uets-correct-pulse{0%,100%{box-shadow:0 0 12px rgba(76, 175, 80, 0.5), inset 0 0 8px rgba(76, 175, 80, 0.15)}50%{box-shadow:0 0 20px rgba(76, 175, 80, 0.7), inset 0 0 12px rgba(76, 175, 80, 0.25)}}.uets-answer-indicator{position:absolute;top:8px;right:8px;background:linear-gradient(135deg, #4CAF50, #45a049);color:white;padding:6px 10px;border-radius:16px;font-size:14px;font-weight:700;z-index:1000;font-family:'Material Icons Outlined';display:flex;align-items:center;justify-content:center;gap:4px;box-shadow:0 2px 8px rgba(76, 175, 80, 0.4)}.uets-answer-indicator::before{content:'star';font-size:18px}.uets-answer-indicator::after{content:'Correct';font-family:'Roboto', sans-serif;font-size:12px;font-weight:600}.uets-streak-bonus{margin-left:8px;color:#FFD700;font-weight:600;font-size:14px;text-shadow:1px 1px 2px rgba(0,0,0,0.3);font-family:'Roboto', sans-serif}.uets-config-gui{position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);background:var(--md-surface);color:var(--md-on-surface);border-radius:28px;padding:0;z-index:10003;width:640px;max-width:90vw;max-height:90vh;overflow:hidden;box-shadow:0 24px 38px rgba(0,0,0,0.14), 0 9px 46px rgba(0,0,0,0.12), 0 11px 15px rgba(0,0,0,0.20);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-config-header{display:flex;justify-content:space-between;align-items:center;padding:24px 24px 12px;border-bottom:1px solid var(--md-outline-variant)}.uets-config-title{font-size:24px;font-weight:400;color:var(--md-on-surface);line-height:32px;letter-spacing:0}.uets-config-close{background:none;border:none;width:40px;height:40px;border-radius:20px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:20px}.uets-config-close::before{content:'close'}.uets-config-close:hover{background:var(--md-surface-container-highest);color:var(--md-on-surface)}.uets-config-content{max-height:calc(90vh - 200px);overflow-y:auto}.uets-config-section{margin-bottom:8px;padding:16px 24px}.uets-config-section-title{font-size:16px;font-weight:500;margin-bottom:16px;color:var(--md-primary);line-height:24px;letter-spacing:0.1px}.uets-config-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;min-height:56px}.uets-config-label-container{display:flex;align-items:center;flex:1;margin-right:16px}.uets-config-label{font-size:16px;font-weight:400;color:var(--md-on-surface);margin-left:12px;line-height:24px;letter-spacing:0.5px}.uets-config-input,.uets-config-select{background:var(--md-surface-container-highest);border:1px solid var(--md-outline);border-radius:4px;padding:16px;color:var(--md-on-surface);font-size:16px;font-family:'Roboto', sans-serif;width:200px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);box-sizing:border-box}.uets-config-input:focus,.uets-config-select:focus{outline:none;border-color:var(--md-primary);border-width:2px;padding:15px}.uets-config-input:disabled{background:var(--md-surface-variant);color:var(--md-on-surface-variant);border-color:var(--md-outline-variant)}.uets-switch{position:relative;display:inline-block;width:52px;height:32px;cursor:pointer}.uets-switch input{opacity:0;width:0;height:0}.uets-switch-slider{position:absolute;top:0;left:0;right:0;bottom:0;background:var(--md-outline);border-radius:16px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);border:2px solid var(--md-outline)}.uets-switch-slider:before{position:absolute;content:"";height:20px;width:20px;left:4px;bottom:4px;background:var(--md-surface-container-highest);border-radius:50%;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);box-shadow:0 1px 3px rgba(0,0,0,0.4)}.uets-switch input:checked + .uets-switch-slider{background:var(--md-primary);border-color:var(--md-primary)}.uets-switch input:checked + .uets-switch-slider:before{transform:translateX(20px);background:var(--md-on-primary)}.uets-switch:hover .uets-switch-slider{box-shadow:0 0 0 8px rgba(103, 80, 164, 0.04)}.uets-switch input:checked:hover + .uets-switch-slider{box-shadow:0 0 0 8px rgba(103, 80, 164, 0.08)}.uets-config-info{background:var(--md-secondary-container);color:var(--md-on-secondary-container);border:none;border-radius:50%;width:22px;height:22px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);font-weight:500}.uets-config-info::before{content:'help';font-size:20px}.uets-config-info:hover{background:var(--md-secondary);color:var(--md-on-secondary);transform:scale(1.1)}.uets-config-buttons{display:flex;justify-content:flex-end;gap:8px;padding:16px 24px 24px;border-top:1px solid var(--md-outline-variant);background:var(--md-surface-container-low)}.uets-config-button{padding:10px 24px;border:none;border-radius:20px;cursor:pointer;font-size:14px;font-weight:500;font-family:'Roboto', sans-serif;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:inline-flex;align-items:center;gap:8px;min-height:40px;justify-content:center;letter-spacing:0.1px}.uets-config-save{background:var(--md-primary);color:var(--md-on-primary)}.uets-config-save::before{content:'save';font-family:'Material Icons Outlined';font-size:18px}.uets-config-save:hover{box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);background:#5a4089}.uets-config-reset{background:var(--md-error);color:var(--md-on-error)}.uets-config-reset::before{content:'refresh';font-family:'Material Icons Outlined';font-size:18px}.uets-config-reset:hover{box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);background:#a02117}.uets-config-cancel{background:transparent;color:var(--md-primary);border:1px solid var(--md-outline)}.uets-config-cancel::before{content:'cancel';font-family:'Material Icons Outlined';font-size:18px}.uets-config-cancel:hover{background:var(--md-surface-container-highest);border-color:var(--md-primary)}.uets-config-content::-webkit-scrollbar{width:8px}.uets-config-content::-webkit-scrollbar-track{background:var(--md-surface-container-low)}.uets-config-content::-webkit-scrollbar-thumb{background:var(--md-outline-variant);border-radius:4px}.uets-config-content::-webkit-scrollbar-thumb:hover{background:var(--md-outline)}.uets-profile-selector{margin:4px;padding:16px;background:var(--md-surface-container-low);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.12)}.uets-profile-list{display:flex;gap:8px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--md-outline-variant) transparent}.uets-profile-list::-webkit-scrollbar{height:6px}.uets-profile-list::-webkit-scrollbar-track{background:transparent}.uets-profile-list::-webkit-scrollbar-thumb{background:var(--md-outline-variant);border-radius:3px}.uets-profile-list::-webkit-scrollbar-thumb:hover{background:var(--md-outline)}.uets-profile-button{background:var(--md-surface-container-highest);color:var(--md-on-surface);border:1px solid var(--md-outline);border-radius:20px;padding:8px 16px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;white-space:nowrap;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);flex-shrink:0}.uets-profile-button:hover{background:var(--md-surface-container);border-color:var(--md-primary)}.uets-profile-button.active{background:var(--md-primary);color:var(--md-on-primary);border-color:var(--md-primary)}.uets-profile-button.active:hover{background:#5a4089}@media (prefers-color-scheme: dark){:root{--md-primary:#D0BCFF;--md-primary-container:#4F378B;--md-on-primary:#371E73;--md-on-primary-container:#EADDFF;--md-secondary:#CCC2DC;--md-secondary-container:#4A4458;--md-on-secondary:#332D41;--md-on-secondary-container:#E8DEF8;--md-tertiary:#EFB8C8;--md-tertiary-container:#633B48;--md-on-tertiary:#492532;--md-on-tertiary-container:#FFD8E4;--md-surface:#141218;--md-surface-dim:#141218;--md-surface-bright:#3B383E;--md-surface-container-lowest:#0F0D13;--md-surface-container-low:#1D1B20;--md-surface-container:#211F26;--md-surface-container-high:#2B2930;--md-surface-container-highest:#36343B;--md-on-surface:#E6E0E9;--md-on-surface-variant:#CAC4D0;--md-outline:#938F99;--md-outline-variant:#49454F;--md-error:#F2B8B5;--md-error-container:#8C1D18;--md-on-error:#601410;--md-on-error-container:#F9DEDC;--md-shadow:#000000}}.kahoot-answer-indicator{position:absolute;top:12px;right:18px;min-width:24px;height:24px;background:linear-gradient(135deg, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0.7) 100%);color:#fff;padding:0 8px;border-radius:12px;font-size:15px;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.18);display:flex;align-items:center;justify-content:center;border:2px solid #fff2;z-index:1000;pointer-events:none;user-select:none;transition:transform 0.15s}.kahoot-answer-button{position:relative}.uets-testportal-invisible{opacity:0 !important;pointer-events:auto !important}
+  @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap');@import url('https://fonts.googleapis.com/icon?family=Material+Icons+Outlined');:root{--md-primary:#6750A4;--md-primary-container:#EADDFF;--md-on-primary:#FFFFFF;--md-on-primary-container:#21005D;--md-secondary:#625B71;--md-secondary-container:#E8DEF8;--md-on-secondary:#FFFFFF;--md-on-secondary-container:#1D192B;--md-tertiary:#7D5260;--md-tertiary-container:#FFD8E4;--md-on-tertiary:#FFFFFF;--md-on-tertiary-container:#31111D;--md-surface:#FEF7FF;--md-surface-dim:#DED8E1;--md-surface-bright:#FEF7FF;--md-surface-container-lowest:#FFFFFF;--md-surface-container-low:#F7F2FA;--md-surface-container:#F1ECF4;--md-surface-container-high:#ECE6F0;--md-surface-container-highest:#E6E0E9;--md-on-surface:#1C1B1F;--md-on-surface-variant:#49454F;--md-outline:#79747E;--md-outline-variant:#CAC4D0;--md-error:#B3261E;--md-error-container:#F9DEDC;--md-on-error:#FFFFFF;--md-on-error-container:#410E0B;--md-shadow:#000000}.uets-card{background:var(--md-surface-container);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);overflow:hidden;font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-elevated-card{background:var(--md-surface-container-low);border-radius:12px;box-shadow:0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);overflow:hidden;font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-filled-button{background:var(--md-primary);color:var(--md-on-primary);border:none;border-radius:20px;padding:10px 24px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-filled-button:hover{box-shadow:0 2px 4px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);transform:translateY(-1px)}.uets-filled-button:active{transform:translateY(0px);box-shadow:0 1px 2px rgba(0,0,0,0.12)}.uets-outlined-button{background:transparent;color:var(--md-primary);border:1px solid var(--md-outline);border-radius:20px;padding:10px 24px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-outlined-button:hover{background:rgba(103, 80, 164, 0.08);border-color:var(--md-primary)}.uets-text-button{background:transparent;color:var(--md-primary);border:none;border-radius:20px;padding:10px 12px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-text-button:hover{background:rgba(103, 80, 164, 0.08)}.uets-fab{background:var(--md-primary-container);color:var(--md-on-primary-container);border:none;border-radius:16px;width:56px;height:56px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.2), 0 6px 10px rgba(0,0,0,0.14), 0 1px 18px rgba(0,0,0,0.12);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);font-size:24px}.uets-fab:hover{box-shadow:0 5px 5px rgba(0,0,0,0.2), 0 9px 18px rgba(0,0,0,0.14), 0 3px 14px rgba(0,0,0,0.12);transform:scale(1.05)}.uets-fab.uets-mods-hidden-state{background:transparent;box-shadow:none}.uets-fab.uets-mods-hidden-state:hover{background:rgba(103, 80, 164, 0.08);box-shadow:none;transform:scale(1.05)}.uets-success-button{background:#a6e3a1;color:white}.uets-warning-button{background:#fab387;color:white}.uets-purple-button{background:#cba6f7;color:white}.uets-ai-button,.uets-copy-prompt-button,.uets-ddg-button,.uets-ddg-link,.uets-gemini-button,.uets-get-answer-button{display:inline-flex;align-items:center;gap:8px;padding:4px 8px;color:var(--md-on-primary);text-decoration:none;border-radius:20px;font-size:14px;font-weight:500;cursor:pointer;text-align:center;vertical-align:middle;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);border:none;font-family:'Roboto', sans-serif;min-height:40px;margin:1px;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)}.uets-ai-button:hover,.uets-copy-prompt-button:hover,.uets-ddg-button:hover,.uets-ddg-link:hover,.uets-gemini-button:hover,.uets-get-answer-button:hover{box-shadow:0 4px 8px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.1);transform:translateY(-2px)}.uets-ddg-button,.uets-ddg-link{background:#a6e3a1 !important;color:white !important}.uets-ai-button,.uets-gemini-button{background:#74c7ec !important;color:white !important}.uets-copy-prompt-button{background:#fab387 !important;color:white !important}.uets-get-answer-button{background:#cba6f7 !important;color:white !important}.uets-ddg-button::before,.uets-ddg-link::before{content:'search';font-family:'Material Icons Outlined';font-size:18px}.uets-ai-button::before,.uets-gemini-button::before{content:'psychology';font-family:'Material Icons Outlined';font-size:18px}.uets-copy-prompt-button::before{content:'content_copy';font-family:'Material Icons Outlined';font-size:18px}.uets-get-answer-button::before{content:'lightbulb';font-family:'Material Icons Outlined';font-size:18px}.uets-option-wrapper{display:flex;flex-direction:column;align-items:stretch;justify-content:space-between;height:100%}.uets-option-wrapper > button.option{display:flex;flex-direction:column;flex-grow:1;min-height:0;width:100%}.uets-ddg-link-option-item{width:100%;box-sizing:border-box;margin-top:12px;padding:8px 0;border-radius:0 0 12px 12px;flex-shrink:0}.uets-main-question-buttons-container{display:flex;justify-content:center;gap:4px;background:#313244;border-radius:12px;margin:1px;flex-wrap:wrap;padding:2px}.uets-response-popup{position:fixed;top:20px;right:20px;background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:12px;padding:16px 20px;z-index:10004;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;font-size:14px;line-height:20px;animation:slideInRight 0.3s ease-out;cursor:pointer;display:flex;align-items:flex-start;gap:12px}@keyframes slideInRight{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes slideOutRight{from{transform:translateX(0);opacity:1}to{transform:translateX(400px);opacity:0}}.uets-response-popup.uets-toast-dismiss{animation:slideOutRight 0.3s ease-in forwards}.uets-response-popup-header{display:none}.uets-response-popup-content{white-space:normal;font-size:14px;line-height:20px;color:var(--md-on-surface);padding:0;max-height:none;overflow:visible;flex:1}.uets-response-popup-close{background:none;border:none;width:24px;height:24px;border-radius:12px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:20px;padding:0;flex-shrink:0}.uets-response-popup-close::before{content:'close'}.uets-response-popup-close:hover{background:rgba(103, 80, 164, 0.08);color:var(--md-primary)}.uets-response-popup-loading{text-align:center;font-style:normal;color:var(--md-on-surface-variant);padding:0;font-size:14px;display:flex;flex-direction:column;align-items:center;gap:8px}.uets-welcome-popup{position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:28px;padding:0;z-index:10004;min-width:320px;max-width:90vh;max-height:80vh;overflow:hidden;box-shadow:0 10px 25px rgba(0,0,0,0.35), 0 6px 10px rgba(0,0,0,0.25);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif !important;font-size:18px}.uets-response-popup-header{display:flex;justify-content:space-between;align-items:center;padding:24px 24px 0;margin-bottom:16px}.uets-response-popup-title{font-weight:600;font-size:22px;color:var(--md-on-surface);line-height:28px}.uets-response-popup-close{background:none;border:none;width:48px;height:48px;border-radius:24px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:24px}.uets-response-popup-close::before{content:'close'}.uets-response-popup-close:hover{background:rgba(103, 80, 164, 0.08);color:var(--md-primary)}.uets-response-popup-content{white-space:pre-wrap;font-size:14px;line-height:20px;color:var(--md-on-surface);padding:0 24px 24px;max-height:calc(80vh - 120px);overflow-y:auto}.uets-response-popup-content b,.uets-response-popup-content strong{color:var(--md-primary);font-weight:600}.uets-response-popup-loading{text-align:center;font-style:normal;color:var(--md-on-surface-variant);padding:40px 24px;font-size:16px;display:flex;flex-direction:column;align-items:center;gap:16px}.uets-loading-spinner{width:32px;height:32px;border:3px solid var(--md-outline-variant);border-top:3px solid var(--md-primary);border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}#uets-toggle-ui-button{position:fixed;bottom:20px;left:20px;z-index:10002;background:var(--md-primary-container);color:var(--md-on-primary-container);border:none;border-radius:16px;width:56px;height:56px;cursor:pointer;box-shadow:0 3px 5px rgba(0,0,0,0.2), 0 6px 10px rgba(0,0,0,0.14), 0 1px 18px rgba(0,0,0,0.12);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);user-select:none;display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:24px}#uets-toggle-ui-button:hover{box-shadow:0 5px 5px rgba(0,0,0,0.2), 0 9px 18px rgba(0,0,0,0.14), 0 3px 14px rgba(0,0,0,0.12);transform:scale(1.05)}#uets-toggle-ui-button.uets-mods-hidden-state{background:transparent;box-shadow:none}#uets-toggle-ui-button.uets-mods-hidden-state:hover{background:rgba(103, 80, 164, 0.08);box-shadow:none}.uets-correct-answer{background:rgba(76, 175, 80, 0.2) !important;border:3px solid #4CAF50 !important;border-radius:12px !important;box-shadow:0 0 12px rgba(76, 175, 80, 0.5), inset 0 0 8px rgba(76, 175, 80, 0.15) !important;animation:uets-correct-pulse 2s ease-in-out infinite !important}@keyframes uets-correct-pulse{0%,100%{box-shadow:0 0 12px rgba(76, 175, 80, 0.5), inset 0 0 8px rgba(76, 175, 80, 0.15)}50%{box-shadow:0 0 20px rgba(76, 175, 80, 0.7), inset 0 0 12px rgba(76, 175, 80, 0.25)}}.uets-answer-indicator{position:absolute;top:8px;right:8px;background:linear-gradient(135deg, #4CAF50, #45a049);color:white;padding:6px 10px;border-radius:16px;font-size:14px;font-weight:700;z-index:1000;font-family:'Material Icons Outlined';display:flex;align-items:center;justify-content:center;gap:4px;box-shadow:0 2px 8px rgba(76, 175, 80, 0.4)}.uets-answer-indicator::before{content:'star';font-size:18px}.uets-answer-indicator::after{content:'Correct';font-family:'Roboto', sans-serif;font-size:12px;font-weight:600}.uets-streak-bonus{margin-left:8px;color:#FFD700;font-weight:600;font-size:14px;text-shadow:1px 1px 2px rgba(0,0,0,0.3);font-family:'Roboto', sans-serif}.uets-config-gui{position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);background:var(--md-surface);color:var(--md-on-surface);border-radius:28px;padding:0;z-index:10003;width:640px;max-width:90vw;max-height:90vh;overflow:hidden;box-shadow:0 24px 38px rgba(0,0,0,0.14), 0 9px 46px rgba(0,0,0,0.12), 0 11px 15px rgba(0,0,0,0.20);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-config-header{display:flex;justify-content:space-between;align-items:center;padding:24px 24px 12px;border-bottom:1px solid var(--md-outline-variant)}.uets-config-title{font-size:24px;font-weight:400;color:var(--md-on-surface);line-height:32px;letter-spacing:0}.uets-config-close{background:none;border:none;width:40px;height:40px;border-radius:20px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:20px}.uets-config-close::before{content:'close'}.uets-config-close:hover{background:var(--md-surface-container-highest);color:var(--md-on-surface)}.uets-config-content{max-height:calc(90vh - 200px);overflow-y:auto}.uets-config-section{margin-bottom:8px;padding:16px 24px}.uets-config-section-title{font-size:16px;font-weight:500;margin-bottom:16px;color:var(--md-primary);line-height:24px;letter-spacing:0.1px}.uets-config-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;min-height:56px}.uets-config-label-container{display:flex;align-items:center;flex:1;margin-right:16px}.uets-config-label{font-size:16px;font-weight:400;color:var(--md-on-surface);margin-left:12px;line-height:24px;letter-spacing:0.5px}.uets-config-input,.uets-config-select{background:var(--md-surface-container-highest);border:1px solid var(--md-outline);border-radius:4px;padding:16px;color:var(--md-on-surface);font-size:16px;font-family:'Roboto', sans-serif;width:200px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);box-sizing:border-box}.uets-config-input:focus,.uets-config-select:focus{outline:none;border-color:var(--md-primary);border-width:2px;padding:15px}.uets-config-input:disabled{background:var(--md-surface-variant);color:var(--md-on-surface-variant);border-color:var(--md-outline-variant)}.uets-switch{position:relative;display:inline-block;width:52px;height:32px;cursor:pointer}.uets-switch input{opacity:0;width:0;height:0}.uets-switch-slider{position:absolute;top:0;left:0;right:0;bottom:0;background:var(--md-outline);border-radius:16px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);border:2px solid var(--md-outline)}.uets-switch-slider:before{position:absolute;content:"";height:20px;width:20px;left:4px;bottom:4px;background:var(--md-surface-container-highest);border-radius:50%;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);box-shadow:0 1px 3px rgba(0,0,0,0.4)}.uets-switch input:checked + .uets-switch-slider{background:var(--md-primary);border-color:var(--md-primary)}.uets-switch input:checked + .uets-switch-slider:before{transform:translateX(20px);background:var(--md-on-primary)}.uets-switch:hover .uets-switch-slider{box-shadow:0 0 0 8px rgba(103, 80, 164, 0.04)}.uets-switch input:checked:hover + .uets-switch-slider{box-shadow:0 0 0 8px rgba(103, 80, 164, 0.08)}.uets-config-info{background:var(--md-secondary-container);color:var(--md-on-secondary-container);border:none;border-radius:50%;width:22px;height:22px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);font-weight:500}.uets-config-info::before{content:'help';font-size:20px}.uets-config-info:hover{background:var(--md-secondary);color:var(--md-on-secondary);transform:scale(1.1)}.uets-config-buttons{display:flex;justify-content:flex-end;gap:8px;padding:16px 24px 24px;border-top:1px solid var(--md-outline-variant);background:var(--md-surface-container-low)}.uets-config-button{padding:10px 24px;border:none;border-radius:20px;cursor:pointer;font-size:14px;font-weight:500;font-family:'Roboto', sans-serif;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:inline-flex;align-items:center;gap:8px;min-height:40px;justify-content:center;letter-spacing:0.1px}.uets-config-save{background:var(--md-primary);color:var(--md-on-primary)}.uets-config-save::before{content:'save';font-family:'Material Icons Outlined';font-size:18px}.uets-config-save:hover{box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);background:#5a4089}.uets-config-reset{background:var(--md-error);color:var(--md-on-error)}.uets-config-reset::before{content:'refresh';font-family:'Material Icons Outlined';font-size:18px}.uets-config-reset:hover{box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);background:#a02117}.uets-config-cancel{background:transparent;color:var(--md-primary);border:1px solid var(--md-outline)}.uets-config-cancel::before{content:'cancel';font-family:'Material Icons Outlined';font-size:18px}.uets-config-cancel:hover{background:var(--md-surface-container-highest);border-color:var(--md-primary)}.uets-config-content::-webkit-scrollbar{width:8px}.uets-config-content::-webkit-scrollbar-track{background:var(--md-surface-container-low)}.uets-config-content::-webkit-scrollbar-thumb{background:var(--md-outline-variant);border-radius:4px}.uets-config-content::-webkit-scrollbar-thumb:hover{background:var(--md-outline)}.uets-profile-selector{margin:4px;padding:16px;background:var(--md-surface-container-low);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.12)}.uets-profile-list{display:flex;gap:8px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--md-outline-variant) transparent}.uets-profile-list::-webkit-scrollbar{height:6px}.uets-profile-list::-webkit-scrollbar-track{background:transparent}.uets-profile-list::-webkit-scrollbar-thumb{background:var(--md-outline-variant);border-radius:3px}.uets-profile-list::-webkit-scrollbar-thumb:hover{background:var(--md-outline)}.uets-profile-button{background:var(--md-surface-container-highest);color:var(--md-on-surface);border:1px solid var(--md-outline);border-radius:20px;padding:8px 16px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;white-space:nowrap;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);flex-shrink:0}.uets-profile-button:hover{background:var(--md-surface-container);border-color:var(--md-primary)}.uets-profile-button.active{background:var(--md-primary);color:var(--md-on-primary);border-color:var(--md-primary)}.uets-profile-button.active:hover{background:#5a4089}@media (prefers-color-scheme: dark){:root{--md-primary:#D0BCFF;--md-primary-container:#4F378B;--md-on-primary:#371E73;--md-on-primary-container:#EADDFF;--md-secondary:#CCC2DC;--md-secondary-container:#4A4458;--md-on-secondary:#332D41;--md-on-secondary-container:#E8DEF8;--md-tertiary:#EFB8C8;--md-tertiary-container:#633B48;--md-on-tertiary:#492532;--md-on-tertiary-container:#FFD8E4;--md-surface:#141218;--md-surface-dim:#141218;--md-surface-bright:#3B383E;--md-surface-container-lowest:#0F0D13;--md-surface-container-low:#1D1B20;--md-surface-container:#211F26;--md-surface-container-high:#2B2930;--md-surface-container-highest:#36343B;--md-on-surface:#E6E0E9;--md-on-surface-variant:#CAC4D0;--md-outline:#938F99;--md-outline-variant:#49454F;--md-error:#F2B8B5;--md-error-container:#8C1D18;--md-on-error:#601410;--md-on-error-container:#F9DEDC;--md-shadow:#000000}}.kahoot-answer-indicator{position:absolute;top:12px;right:18px;min-width:24px;height:24px;background:linear-gradient(135deg, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0.7) 100%);color:#fff;padding:0 8px;border-radius:12px;font-size:15px;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.18);display:flex;align-items:center;justify-content:center;border:2px solid #fff2;z-index:1000;pointer-events:none;user-select:none;transition:transform 0.15s}.kahoot-answer-button{position:relative}
 .uets-powerup-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10005;display:flex;align-items:center;justify-content:center;padding:16px;font-family:'Roboto',sans-serif}
 .uets-powerup-modal{background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:20px;max-width:720px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 10px 25px rgba(0,0,0,0.35);overflow:hidden}
 .uets-powerup-header{display:flex;justify-content:space-between;align-items:center;padding:20px 24px 8px}
@@ -907,7 +904,7 @@
         <div class="uets-config-section-title">General Settings</div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Makes the website think that it's in fullscreen mode AND focused. Recommended on Testportal and Wayground (if the teacher enabled extra protections)." title="Info"></button>
+            <button class="uets-config-info" data-info="Makes the website think that it's in fullscreen mode AND focused. Recommended on Wayground (if the teacher enabled extra protections)." title="Info"></button>
             <label class="uets-config-label">Fullscreen spoofing</label>
           </div>
           <label class="uets-switch">
@@ -1786,139 +1783,78 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     GM_setValue(UI_MODS_ENABLED_KEY, sharedState.uiModificationsEnabled);
     updateToggleButtonAppearance();
 
-    const isTestPortal = sharedState.currentDomain.includes("testportal.net") ||
-      sharedState.currentDomain.includes("testportal.pl");
-
     if (!sharedState.uiModificationsEnabled) {
-      if (isTestPortal) {
-        // On TestPortal: just hide elements with opacity
-        document.querySelectorAll(
-          ".uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-get-answer-button, .uets-main-question-buttons-container, .uets-streak-bonus"
-        ).forEach((el) => el.classList.add("uets-testportal-invisible"));
-
-        if (sharedState.geminiPopup) {
-          sharedState.geminiPopup.classList.add("uets-testportal-invisible");
-        }
-      } else {
-        // On other sites: remove elements as before
-        document.querySelectorAll(
-          ".uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-get-answer-button, .uets-main-question-buttons-container, .uets-streak-bonus"
-        ).forEach((el) => el.remove());
-
-        if (sharedState.geminiPopup) {
-          sharedState.geminiPopup.remove();
-          sharedState.geminiPopup = null;
-        }
-
-        // Remove correct answer highlighting
-        document.querySelectorAll("button.option.uets-correct-answer").forEach((button) => {
-          button.classList.remove("uets-correct-answer");
-          button.style.position = "";
-          const indicator = button.querySelector(".uets-answer-indicator");
-          if (indicator) {
-            indicator.remove();
-          }
-        });
-
-        document.querySelectorAll(".uets-option-wrapper").forEach((wrapper) => {
-          const button = wrapper.querySelector("button.option");
-          if (button && wrapper.parentNode) {
-            wrapper.parentNode.insertBefore(button, wrapper);
-          }
-          wrapper.remove();
-        });
-
-        sharedState.elementsToCleanup.forEach((el) => {
-          if (el && el.parentNode && !el.querySelector("button.option")) {
-            el.remove();
-          }
-        });
-        sharedState.elementsToCleanup = [];
-
-        if (sharedState.currentDomain.includes("wayground.com") || sharedState.currentDomain.includes("quizizz.com")) {
-          // Revert text edits
-          if (sharedState.originalTabLeaveHTML !== null) {
-            const ruleDiv = document.querySelector('.test-mode-container');
-            if (ruleDiv) {
-              ruleDiv.innerHTML = sharedState.originalTabLeaveHTML;
-            }
-            sharedState.originalTabLeaveHTML = null;
-          }
-          if (sharedState.originalStartButtonText !== null) {
-            const startButton = document.querySelector('.start-game');
-            if (startButton) {
-              const span = startButton.querySelector('span');
-              if (span) {
-                span.textContent = sharedState.originalStartButtonText;
-              }
-            }
-            sharedState.originalStartButtonText = null;
-          }
-        }
-
-        if (sharedState.currentDomain.includes("docs.google.com")) {
-          const questionBlocks = document.querySelectorAll(
-            'div[role="listitem"] > div[jsmodel]',
-          );
-          questionBlocks.forEach((block) => {
-            delete block.dataset.uetsButtonsAdded;
-          });
-        }
-
-        if (
-          sharedState.currentDomain.includes("testportal.net") ||
-          sharedState.currentDomain.includes("testportal.pl")
-        ) {
-          const questionElements = document.querySelectorAll(".question_essence");
-          questionElements.forEach((el) => {
-            delete el.dataset.enhancementsAdded;
-          });
-        }
-      }
-    } else {
-      if (isTestPortal) {
-        // On TestPortal: show elements by removing opacity class
-        document.querySelectorAll(
-          ".uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-get-answer-button, .uets-main-question-buttons-container, .uets-streak-bonus"
-        ).forEach((el) => el.classList.remove("uets-testportal-invisible"));
-
-        if (sharedState.geminiPopup) {
-          sharedState.geminiPopup.classList.remove("uets-testportal-invisible");
-        }
-      } else {
-        setTimeout(() => {
-          initializeDomainSpecific();
-        }, 100);
-      }
-    }
-  };
-
-  // Add cleanup on navigation (beforeunload event):
-  window.addEventListener("beforeunload", () => {
-    const isTestPortal = sharedState.currentDomain.includes("testportal.net") ||
-      sharedState.currentDomain.includes("testportal.pl");
-
-    if (isTestPortal) {
-      // Remove all UETS elements before navigating away from TestPortal
+      // Remove elements
       document.querySelectorAll(
-        ".uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-get-answer-button, .uets-main-question-buttons-container, .uets-streak-bonus, .uets-response-popup, .uets-welcome-popup, .uets-config-gui"
+        ".uets-ddg-link, .uets-gemini-button, .uets-copy-prompt-button, .uets-get-answer-button, .uets-main-question-buttons-container, .uets-streak-bonus"
       ).forEach((el) => el.remove());
 
-      sharedState.elementsToCleanup.forEach((el) => {
-        if (el && el.parentNode) {
-          el.remove();
+      if (sharedState.geminiPopup) {
+        sharedState.geminiPopup.remove();
+        sharedState.geminiPopup = null;
+      }
+
+      // Remove correct answer highlighting
+      document.querySelectorAll("button.option.uets-correct-answer").forEach((button) => {
+        button.classList.remove("uets-correct-answer");
+        button.style.position = "";
+        const indicator = button.querySelector(".uets-answer-indicator");
+        if (indicator) {
+          indicator.remove();
         }
       });
 
-      // Remove toggle button on TestPortal before navigation
-      if (sharedState.toggleButton) {
-        sharedState.toggleButton.remove();
+      document.querySelectorAll(".uets-option-wrapper").forEach((wrapper) => {
+        const button = wrapper.querySelector("button.option");
+        if (button && wrapper.parentNode) {
+          wrapper.parentNode.insertBefore(button, wrapper);
+        }
+        wrapper.remove();
+      });
+
+      sharedState.elementsToCleanup.forEach((el) => {
+        if (el && el.parentNode && !el.querySelector("button.option")) {
+          el.remove();
+        }
+      });
+      sharedState.elementsToCleanup = [];
+
+      if (sharedState.currentDomain.includes("wayground.com") || sharedState.currentDomain.includes("quizizz.com")) {
+        // Revert text edits
+        if (sharedState.originalTabLeaveHTML !== null) {
+          const ruleDiv = document.querySelector('.test-mode-container');
+          if (ruleDiv) {
+            ruleDiv.innerHTML = sharedState.originalTabLeaveHTML;
+          }
+          sharedState.originalTabLeaveHTML = null;
+        }
+        if (sharedState.originalStartButtonText !== null) {
+          const startButton = document.querySelector('.start-game');
+          if (startButton) {
+            const span = startButton.querySelector('span');
+            if (span) {
+              span.textContent = sharedState.originalStartButtonText;
+            }
+          }
+          sharedState.originalStartButtonText = null;
+        }
       }
 
-      // Restore original RegExp.prototype.test
-      RegExp.prototype.test = sharedState.originalRegExpTest;
+      if (sharedState.currentDomain.includes("docs.google.com")) {
+        const questionBlocks = document.querySelectorAll(
+          'div[role="listitem"] > div[jsmodel]',
+        );
+        questionBlocks.forEach((block) => {
+          delete block.dataset.uetsButtonsAdded;
+        });
+      }
+
+    } else {
+      setTimeout(() => {
+        initializeDomainSpecific();
+      }, 100);
     }
-  });
+  };
 
   const createToggleButton = () => {
     if (document.getElementById("uets-toggle-ui-button")) return;
@@ -2685,132 +2621,6 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     },
   };
 
-  // TESTPORTAL MODULE
-  const testportalModule = {
-    customRegExpTestFunction: function (s) {
-      const string = this.toString();
-      if (string.includes("native code") && string.includes("function")) {
-        return true;
-      }
-      return sharedState.originalRegExpTest.call(this, s);
-    },
-
-    processQuestionElement: (qEssenceEl) => {
-      if (
-        !sharedState.uiModificationsEnabled ||
-        qEssenceEl.dataset.enhancementsAdded
-      )
-        return;
-
-      let questionTextContent = (
-        qEssenceEl.innerText ||
-        qEssenceEl.textContent ||
-        ""
-      ).trim();
-      if (!questionTextContent) return;
-
-      const questionContainer = qEssenceEl.closest(
-        ".question_container_wrapper, .question-view, .question-content, form, div.row, .question_row_content_container, .question_item_view_v2, .q_tresc_pytania_mock, .question_essence_fs",
-      );
-      let answerElements = [];
-
-      if (questionContainer) {
-        answerElements = Array.from(
-          questionContainer.querySelectorAll(
-            ".answer_body, .answer-body, .odpowiedz_tresc",
-          ),
-        );
-      } else {
-        const formElement = qEssenceEl.closest("form");
-        if (formElement) {
-          answerElements = Array.from(
-            formElement.querySelectorAll(
-              ".answer_body, .answer-body, .odpowiedz_tresc",
-            ),
-          );
-        }
-      }
-
-      const options = answerElements
-        .map((optEl) => (optEl.innerText || optEl.textContent || "").trim())
-        .filter(Boolean);
-
-      let questionImageElement = qEssenceEl.querySelector("img");
-      if (!questionImageElement && questionContainer) {
-        questionImageElement = questionContainer.querySelector(
-          "img.question-image, img.question_image_preview, .question_media img, .question-body__attachment img, .image_area img",
-        );
-      }
-
-      const imageUrl = questionImageElement ? questionImageElement.src : null;
-
-      if (questionTextContent || imageUrl || options.length > 0) {
-        addQuestionButtons(
-          qEssenceEl,
-          questionTextContent,
-          options,
-          imageUrl,
-          "test",
-          false,
-          "DDG",
-        );
-      }
-
-      qEssenceEl.dataset.enhancementsAdded = "true";
-    },
-
-    enhanceAllExistingQuestions: () => {
-      if (!sharedState.uiModificationsEnabled) return;
-      const qElements = document.getElementsByClassName("question_essence");
-      for (const qEl of qElements) {
-        testportalModule.processQuestionElement(qEl);
-      }
-    },
-
-    initialize: () => {
-      if (sharedState.uiModificationsEnabled) {
-        RegExp.prototype.test = testportalModule.customRegExpTestFunction;
-        testportalModule.enhanceAllExistingQuestions();
-
-        if (sharedState.observer) sharedState.observer.disconnect();
-
-        sharedState.observer = new MutationObserver((mutationsList) => {
-          if (!sharedState.uiModificationsEnabled) return;
-          for (const mutation of mutationsList) {
-            if (mutation.type === "childList") {
-              for (const node of mutation.addedNodes) {
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                  if (
-                    node.classList &&
-                    (node.classList.contains("question_essence") ||
-                      node.querySelector(".question_essence"))
-                  ) {
-                    if (node.classList.contains("question_essence")) {
-                      testportalModule.processQuestionElement(node);
-                    } else {
-                      const qElements =
-                        node.getElementsByClassName("question_essence");
-                      for (const qEl of qElements) {
-                        testportalModule.processQuestionElement(qEl);
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        });
-
-        sharedState.observer.observe(document.body, {
-          childList: true,
-          subtree: true,
-        });
-      } else {
-        RegExp.prototype.test = sharedState.originalRegExpTest;
-      }
-    },
-  };
-
   // GOOGLE FORMS MODULE
   const googleFormsModule = {
     handleCopyClick: (event) => {
@@ -3159,8 +2969,8 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       GM_log("[+] Blocked cheating detection request to createTestGameActivity");
     }
 
-    const isQuizJoinUrl = url => 
-      (url.includes("play-api") && /soloJoin|rejoinGame|join/.test(url)) 
+    const isQuizJoinUrl = url =>
+      (url.includes("play-api") && /soloJoin|rejoinGame|join/.test(url))
       || url.includes("_quizserver/main/v2/quiz")
       || /\/_gameapi\/main\/public\/v1\/games\/[^\/]+\/rejoin/.test(url);
 
@@ -3218,21 +3028,6 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       return;
     }
 
-    // Intercept TestPortal requests and force wb=0
-    const isTestPortal = this._url?.includes("testportal.net") || this._url?.includes("testportal.pl");
-    if (this._method === "POST" && isTestPortal && this._url.includes("DoTestQuestion.html") && typeof data === "string") {
-      try {
-        const urlParams = new URLSearchParams(data);
-        if (urlParams.has('wb')) {
-          urlParams.set('wb', '0');
-          GM_log(`[+] Modified TestPortal wb parameter to 0`);
-          return originalXMLHttpRequestSend.call(this, urlParams.toString());
-        }
-      } catch (e) {
-        GM_log("[!] Failed to modify TestPortal request:", e);
-      }
-    }
-
     // Intercept POST requests to proceedGame and modify timeTaken
     const isProceed = isWaygroundProceedUrl(this._url);
     const isWaygroundQuizizz = this._url?.includes("wayground.com") || this._url?.includes("quizizz.com");
@@ -3275,7 +3070,6 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
   window.fetch = function (url, options) {
     const urlString = typeof url === 'string' ? url : url?.url || url?.href || '';
     const isWaygroundQuizizz = urlString.includes("wayground.com") || urlString.includes("quizizz.com");
-    const isTestPortal = urlString.includes("testportal.net") || urlString.includes("testportal.pl");
 
     // Block site optimization URLs
     if (siteOptimizations.shouldBlockUrl(urlString)) {
@@ -3299,20 +3093,6 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     if (urlString.includes("player-infraction") && isWaygroundQuizizz && options?.method === "POST") {
       GM_log("[+] Blocked player-infraction telemetry request");
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200, statusText: "OK" }));
-    }
-
-    // Intercept TestPortal requests via fetch and force wb=0
-    if (isTestPortal && urlString.includes("DoTestQuestion.html") && options?.method === "POST" && typeof options.body === "string") {
-      try {
-        const urlParams = new URLSearchParams(options.body);
-        if (urlParams.has('wb')) {
-          urlParams.set('wb', '0');
-          GM_log(`[+] Modified TestPortal wb parameter to 0`);
-          return originalFetch.call(this, url, { ...options, body: urlParams.toString() });
-        }
-      } catch (e) {
-        GM_log("[!] Failed to modify TestPortal fetch request:", e);
-      }
     }
 
     // Intercept POST requests to proceedGame via fetch
@@ -3390,15 +3170,6 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
         spoofFullscreenAndFocus();
       }
       waygroundModule.initialize();
-    } else if (
-      hostname.includes("testportal.net") ||
-      hostname.includes("testportal.pl")
-    ) {
-      GM_log("[*] Initializing Testportal module...");
-      if (sharedState.config.enableSpoofFullscreen) {
-        spoofFullscreenAndFocus();
-      }
-      testportalModule.initialize();
     } else if (
       hostname.includes("docs.google.com") &&
       window.location.pathname.includes("/forms/")

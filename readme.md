@@ -9,10 +9,9 @@ Collection of userscripts that I made for various purposes.
 
 A multi-cheat tool for some educational platforms.
 
-- Supports Quizizz/Wayground, Google Forms, Testportal, and Kahoot.
-- Universal features: Adding AI, copy prompt, copy text, and DDG buttons to questions, and some answers. Doesn't work on Kahoot.
-- Testportal: Removes the "safety" measures, making you unable to leave the window.
-- Hides itself quickly, at the press of a button, press the bottom-left corner of the screen to reveal/hide the edits.
+- Supports Quizizz/Wayground, Google Forms, and Kahoot.
+- Universal features: Adding AI, copy prompt, copy text, and DDG buttons to questions and some answers. Doesn't work on Kahoot.
+- Hides itself quickly - at the press of a button, press the bottom-left corner of the screen to reveal/hide the edits.
 - Quizizz/Wayground: Crowdsourcing answers (every time you answer a question, its correct answer gets sent to the server, and when you encounter the same question, it will show you the correct answer), improved streak bonus counter, forced quick answer times (you'll always get the bonus points), hijack timer for bonus points.
 - Kahoot: Crowdsourcing answers (you'll automatically get connected to any other person who has the script installed, their answers will be shown to you, and vice versa. This is so you can make an educated guess about the answer/s.).
 
@@ -45,6 +44,6 @@ OR
 
 ## Roperunner
 
-Cheat for zawodowe.edu.pl
+Cheat for zawodowe.edu.pl, shows the answer to questions in the top right corner automatically
 
 Requires an openrouter api key - configured when you open the site
