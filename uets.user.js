@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.6.3
+// @version      1.7.0
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -43,7 +43,7 @@
     geminiModel: "gemini-flash-lite-latest",
     geminiThinkingBudget: 512,
     openrouterApiKey: "",
-    openrouterModel: "x-ai/grok-4.1-fast",
+    openrouterModel: "x-ai/grok-4.3",
     openrouterMaxTokens: 2048,
     openrouterReasoningMaxTokens: 2000,
     openrouterReasoningEffort: "medium",
@@ -80,8 +80,12 @@
 
   // Models that use effort-based reasoning
   const OPENROUTER_EFFORT_MODELS = new Set([
-    'openai/gpt-5-nano',
-    'x-ai/grok-4.1-fast'
+    'google/gemini-3.1-flash-lite',
+    'openai/gpt-5.4-nano',
+    'x-ai/grok-4.3',
+    'google/gemini-3.5-flash',
+    'qwen/qwen3.7-plus',
+    'moonshotai/kimi-k2.6'
   ]);
 
 
@@ -1118,12 +1122,12 @@
               <label class="uets-config-label">Model</label>
             </div>
             <select class="uets-config-select" id="openrouterModel" style="width: 200px;">
-              <option value="google/gemini-2.5-flash-lite">google/gemini-2.5-flash-lite</option>
-              <option value="openai/gpt-5-nano">openai/gpt-5-nano</option>
-              <option value="x-ai/grok-4.1-fast">x-ai/grok-4.1-fast</option>
-              <option value="google/gemini-3-flash-preview">google/gemini-3-flash-preview</option>
-              <option value="bytedance-seed/seed-1.6-flash">bytedance-seed/seed-1.6-flash</option>
-              <option value="moonshotai/kimi-k2.5">moonshotai/kimi-k2.5</option>
+              <option value="google/gemini-3.1-flash-lite">google/gemini-3.1-flash-lite</option>
+              <option value="openai/gpt-5.4-nano">openai/gpt-5.4-nano</option>
+              <option value="x-ai/grok-4.3">x-ai/grok-4.3</option>
+              <option value="google/gemini-3.5-flash">google/gemini-3.5-flash</option>
+              <option value="qwen/qwen3.7-plus">qwen/qwen3.7-plus</option>
+              <option value="moonshotai/kimi-k2.6">moonshotai/kimi-k2.6</option>
             </select>
           </div>
           <div class="uets-config-item">
@@ -1199,7 +1203,7 @@
 
       // OpenRouter settings
       document.getElementById('openrouterApiKey').value = sharedState.config.openrouterApiKey || '';
-      document.getElementById('openrouterModel').value = sharedState.config.openrouterModel || 'x-ai/grok-4.1-fast';
+      document.getElementById('openrouterModel').value = sharedState.config.openrouterModel || 'x-ai/grok-4.3';
       document.getElementById('openrouterMaxTokens').value = sharedState.config.openrouterMaxTokens || 2048;
       document.getElementById('openrouterReasoningMaxTokens').value = sharedState.config.openrouterReasoningMaxTokens || 2000;
       document.getElementById('openrouterReasoningEffort').value = sharedState.config.openrouterReasoningEffort || 'medium';
@@ -1588,7 +1592,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
 
     const promptText = buildGeminiPrompt(question, options, !!imageData, platform);
     const url = "https://openrouter.ai/api/v1/chat/completions";
-    const model = sharedState.config.openrouterModel || "x-ai/grok-4.1-fast";
+    const model = sharedState.config.openrouterModel || "x-ai/grok-4.3";
 
     const content = [{ type: "text", text: promptText }];
     if (sharedState.config.includeImages && imageData?.base64Data && imageData?.mimeType) {
@@ -3203,6 +3207,21 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     }
     if (!sharedState.config.geminiModel) {
       sharedState.config.geminiModel = 'gemini-flash-lite-latest';
+    }
+
+    // Auto-migrate old OpenRouter model names to new ones
+    const MODEL_MIGRATIONS = {
+      'google/gemini-2.5-flash-lite': 'google/gemini-3.1-flash-lite',
+      'openai/gpt-5-nano': 'openai/gpt-5.4-nano',
+      'x-ai/grok-4.1-fast': 'x-ai/grok-4.3',
+      'google/gemini-3-flash-preview': 'google/gemini-3.5-flash',
+      'bytedance-seed/seed-1.6-flash': 'qwen/qwen3.7-plus',
+      'moonshotai/kimi-k2.5': 'moonshotai/kimi-k2.6'
+    };
+    const currentModel = sharedState.config.openrouterModel;
+    if (currentModel && MODEL_MIGRATIONS[currentModel]) {
+      sharedState.config.openrouterModel = MODEL_MIGRATIONS[currentModel];
+      GM_log(`[UETS] Migrated OpenRouter model: ${currentModel} -> ${MODEL_MIGRATIONS[currentModel]}`);
     }
 
     createToggleButton();
