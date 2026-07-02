@@ -19,7 +19,7 @@ A multi-cheat tool for some educational platforms.
 
 1. Install Go
 2. Install the dependencies with `go mod download`
-3. Run the server with `go run main.go`
+3. Run the server with `go run .`
 4. The server will be running at `http://localhost:5000`, all answers will be stored in `data/quiz_data.db`. Logs will be stored in `uets-server.log`.
 
 OR

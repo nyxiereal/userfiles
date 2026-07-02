@@ -250,6 +250,33 @@ func saveQuestion(questionID string, questionType *string, correctAnswers interf
 	return nil
 }
 
+func saveQuestionAnswerIfMissing(questionID string, questionType string, correctAnswers interface{}) (bool, error) {
+	now := time.Now().UTC().Format("2006-01-02T15:04:05.999999")
+	var qt sql.NullString
+	if questionType != "" {
+		qt = sql.NullString{String: questionType, Valid: true}
+	}
+
+	res, err := db.Exec(
+		`INSERT INTO questions (question_id, question_type, correct_answers, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(question_id) DO UPDATE SET
+		   question_type = COALESCE(excluded.question_type, questions.question_type),
+		   correct_answers = excluded.correct_answers,
+		   updated_at = excluded.updated_at
+		 WHERE questions.correct_answers IS NULL`,
+		questionID, qt, marshalAnswer(correctAnswers), now, now,
+	)
+	if err != nil {
+		return false, err
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rowsAffected > 0, nil
+}
+
 // ---------------------------------------------------------------------------
 // HTTP handlers
 // ---------------------------------------------------------------------------
@@ -306,17 +333,13 @@ func handleQuestionEndpoint(w http.ResponseWriter, r *http.Request) {
 		if questionType == "" {
 			questionType = inferQuestionTypeFromAnswerValue(req.CorrectAnswers)
 		}
-		existing, err := getQuestion(req.QuestionID)
+		saved, err := saveQuestionAnswerIfMissing(req.QuestionID, questionType, req.CorrectAnswers)
 		if err != nil {
 			writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
 			return
 		}
-		if existing != nil && existing.CorrectAnswers.Valid {
+		if !saved {
 			writeJSON(w, map[string]string{"error": "Answer already exists for this question"}, http.StatusForbidden)
-			return
-		}
-		if err := saveQuestion(req.QuestionID, stringPtr(questionType), req.CorrectAnswers); err != nil {
-			writeJSON(w, map[string]string{"error": "database error"}, http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, map[string]bool{"success": true}, http.StatusOK)
@@ -709,8 +732,12 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: corsMiddleware(mux),
+		Addr:              ":" + port,
+		Handler:           corsMiddleware(mux),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	go func() {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.7.0
+// @version      1.7.1
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -129,6 +129,30 @@
       reactionSpamDelay: 500,
       enableSiteOptimizations: true,
     },
+  };
+
+  const appendFormattedPopupText = (container, value) => {
+    const text = String(value ?? "");
+    const lines = text.split("\n");
+
+    lines.forEach((line, index) => {
+      if (index > 0) container.appendChild(document.createElement("br"));
+
+      const labelMatch = line.match(/^(Correct Answer\(s\):|Reasoning:)(.*)$/i);
+      if (!labelMatch) {
+        container.appendChild(document.createTextNode(line));
+        return;
+      }
+
+      if (/^Reasoning:/i.test(labelMatch[1]) && index > 0) {
+        container.appendChild(document.createElement("br"));
+      }
+
+      const label = document.createElement("strong");
+      label.textContent = labelMatch[1];
+      container.appendChild(label);
+      container.appendChild(document.createTextNode(labelMatch[2]));
+    });
   };
 
   // === SHARED STATE ===
@@ -897,7 +921,7 @@
     <div class="uets-profile-selector">
       <div class="uets-profile-list">
         <button class="uets-profile-button" data-profile="Custom">Custom</button>
-        <button class="uets-profile-button" data-profile="Stealthy">Stealthy</button>
+        <button class="uets-profile-button" data-profile="Stealthy Extended">Stealthy Extended</button>
         <button class="uets-profile-button" data-profile="Creator's choice">Creator's choice</button>
         <button class="uets-profile-button" data-profile="LMAO">LMAO</button>
       </div>
@@ -1728,23 +1752,18 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     popup.classList.remove("uets-toast-dismiss");
 
     const contentDiv = popup.querySelector(".uets-response-popup-content");
+    contentDiv.textContent = "";
     if (isLoading) {
-      contentDiv.innerHTML = `
-      <div class="uets-response-popup-loading">
-        <div class="uets-loading-spinner"></div>
-        ${content}
-      </div>
-    `;
+      const loading = document.createElement("div");
+      loading.classList.add("uets-response-popup-loading");
+
+      const spinner = document.createElement("div");
+      spinner.classList.add("uets-loading-spinner");
+      loading.appendChild(spinner);
+      loading.appendChild(document.createTextNode(String(content ?? "")));
+      contentDiv.appendChild(loading);
     } else {
-      let formattedContent = content.replace(
-        /^(Correct Answer\(s\):)/gim,
-        "<strong>$1</strong>",
-      );
-      formattedContent = formattedContent.replace(
-        /^(Reasoning:)/gim,
-        "<br><br><strong>$1</strong>",
-      );
-      contentDiv.innerHTML = formattedContent;
+      appendFormattedPopupText(contentDiv, content);
     }
 
     popup.style.display = "flex";

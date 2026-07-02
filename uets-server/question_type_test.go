@@ -184,6 +184,65 @@ func TestBackfillQuestionTypeIfMissing(t *testing.T) {
 	}
 }
 
+func TestSaveQuestionAnswerIfMissingDoesNotOverwriteExistingAnswer(t *testing.T) {
+	testDB := setupQuestionTypeTestDB(t)
+
+	saved, err := saveQuestionAnswerIfMissing("existing-answer", "MCQ", 1)
+	if err != nil {
+		t.Fatalf("save first answer: %v", err)
+	}
+	if !saved {
+		t.Fatalf("save first answer returned false, want true")
+	}
+
+	saved, err = saveQuestionAnswerIfMissing("existing-answer", "MCQ", 2)
+	if err != nil {
+		t.Fatalf("save second answer: %v", err)
+	}
+	if saved {
+		t.Fatalf("save second answer returned true, want false")
+	}
+
+	var storedAnswer string
+	if err := testDB.QueryRow(`SELECT correct_answers FROM questions WHERE question_id = 'existing-answer'`).Scan(&storedAnswer); err != nil {
+		t.Fatalf("read stored answer: %v", err)
+	}
+	if storedAnswer != "1" {
+		t.Fatalf("stored answer = %q, want %q", storedAnswer, "1")
+	}
+}
+
+func TestSaveQuestionAnswerIfMissingUpdatesUnansweredQuestion(t *testing.T) {
+	testDB := setupQuestionTypeTestDB(t)
+
+	_, err := testDB.Exec(
+		`INSERT INTO questions (question_id, question_type, correct_answers, created_at, updated_at)
+		 VALUES ('unanswered', NULL, NULL, '2026-04-23T09:13:24.391256', '2026-04-23T09:13:24.391256')`,
+	)
+	if err != nil {
+		t.Fatalf("seed unanswered question: %v", err)
+	}
+
+	saved, err := saveQuestionAnswerIfMissing("unanswered", "MSQ", []interface{}{float64(0), float64(2)})
+	if err != nil {
+		t.Fatalf("save answer for unanswered question: %v", err)
+	}
+	if !saved {
+		t.Fatalf("save answer returned false, want true")
+	}
+
+	var questionType, storedAnswer string
+	if err := testDB.QueryRow(`SELECT question_type, correct_answers FROM questions WHERE question_id = 'unanswered'`).Scan(&questionType, &storedAnswer); err != nil {
+		t.Fatalf("read stored question: %v", err)
+	}
+	if questionType != "MSQ" {
+		t.Fatalf("question type = %q, want %q", questionType, "MSQ")
+	}
+	if storedAnswer != "[0,2]" {
+		t.Fatalf("stored answer = %q, want %q", storedAnswer, "[0,2]")
+	}
+}
+
 func TestBackfillMissingQuestionTypesFromStoredAnswers(t *testing.T) {
 	testDB := setupQuestionTypeTestDB(t)
 

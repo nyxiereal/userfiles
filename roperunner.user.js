@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         roperunner
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  Naciśnij V na stronie egzaminu, aby pokazać ledwo widoczną literę odpowiedzi (A/B/C/D) w prawym górnym rogu. Prefetchuje odpowiedzi w tle.
 // @author       Nyx & Kimi
 // @match        https://zawodowe.edu.pl/*
@@ -15,7 +15,7 @@
 (function () {
     'use strict';
 
-    const CACHE_PREFIX = 'zah_cache_v3_';
+    const CACHE_PREFIX = 'zah_cache_v4_';
     const MODEL = 'openai/gpt-5.4-nano';
     const OR_API = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -113,16 +113,23 @@
         return 'h' + Math.abs(h).toString(36);
     }
 
-    function cacheKey(content) {
-        return CACHE_PREFIX + hashString(content);
+    function getQuestionCacheInput(q) {
+        return [
+            q.content,
+            ...q.answers.map(a => `${a.label}\t${a.text}`)
+        ].join('\n');
     }
 
-    function getCached(content) {
-        try { return localStorage.getItem(cacheKey(content)); } catch (e) { return null; }
+    function cacheKey(cacheInput) {
+        return CACHE_PREFIX + hashString(cacheInput);
     }
 
-    function setCached(content, letter) {
-        try { localStorage.setItem(cacheKey(content), letter); } catch (e) { }
+    function getCached(cacheInput) {
+        try { return localStorage.getItem(cacheKey(cacheInput)); } catch (e) { return null; }
+    }
+
+    function setCached(cacheInput, letter) {
+        try { localStorage.setItem(cacheKey(cacheInput), letter); } catch (e) { }
     }
 
     function buildPrompt(q) {
@@ -149,14 +156,14 @@
     }
 
     // API
-    function askOpenRouter(content, promptText) {
+    function askOpenRouter(cacheInput, promptText) {
         const key = GM_getValue('openrouter_key', '');
         if (!key) {
             updateOverlay('!!');
             console.warn('[ZAH] Brak klucza API.');
             return;
         }
-        const id = hashString(content);
+        const id = hashString(cacheInput);
         if (!window._zah_pending) window._zah_pending = new Set();
         if (window._zah_pending.has(id)) return;
         window._zah_pending.add(id);
@@ -192,10 +199,10 @@
                     console.warn('[ZAH] Parse error', e, resp.responseText);
                 }
                 if (letter) {
-                    setCached(content, letter);
+                    setCached(cacheInput, letter);
                     // Only update overlay if this answer still matches the currently visible question
                     const cur = extractQuestionFromDOM();
-                    if (cur && hashString(cur.content) === hashString(content)) {
+                    if (cur && hashString(getQuestionCacheInput(cur)) === hashString(cacheInput)) {
                         updateOverlay(letter);
                     }
                 }
@@ -214,14 +221,15 @@
             updateOverlay('--');
             return;
         }
-        const cached = getCached(q.content);
+        const cacheInput = getQuestionCacheInput(q);
+        const cached = getCached(cacheInput);
         if (cached) {
             updateOverlay(cached);
             return;
         }
         if (showSpinner) updateOverlay('...');
         const prompt = buildPrompt(q);
-        askOpenRouter(q.content, prompt);
+        askOpenRouter(cacheInput, prompt);
     }
 
     function handleShowAnswer() {

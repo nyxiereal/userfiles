@@ -304,11 +304,11 @@
             
             tbody.innerHTML = questions.map(q => {
                 const typeClass = q.questionType ? 
-                    `type-${q.questionType.toLowerCase()}` : 'type-mcq';
+                    `type-${String(q.questionType).toLowerCase().replace(/[^a-z0-9_-]+/g, '-')}` : 'type-mcq';
                 const typeText = q.questionType || 'Unknown';
                 
                 const answerText = q.correctAnswers !== null ?
-                    `<span class="answer">${JSON.stringify(q.correctAnswers)}</span>` :
+                    `<span class="answer">${escapeHtml(JSON.stringify(q.correctAnswers))}</span>` :
                     '<span class="no-answer">Not answered yet</span>';
                 
                 const created = new Date(q.createdAt).toLocaleString();
@@ -316,19 +316,29 @@
                 
                 return `
                     <tr>
-                        <td><span class="question-id">${q.questionId}</span></td>
-                        <td><span class="question-type ${typeClass}">${typeText}</span></td>
+                        <td><span class="question-id">${escapeHtml(q.questionId)}</span></td>
+                        <td><span class="question-type ${typeClass}">${escapeHtml(typeText)}</span></td>
                         <td>${answerText}</td>
-                        <td><span class="timestamp">${created}</span></td>
-                        <td><span class="timestamp">${updated}</span></td>
+                        <td><span class="timestamp">${escapeHtml(created)}</span></td>
+                        <td><span class="timestamp">${escapeHtml(updated)}</span></td>
                     </tr>
                 `;
             }).join('');
         }
         
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[char]));
+        }
+
         function filterQuestions(searchTerm) {
             const filtered = allQuestions.filter(q => 
-                q.questionId.toLowerCase().includes(searchTerm.toLowerCase())
+                String(q.questionId).toLowerCase().includes(searchTerm.toLowerCase())
             );
             renderQuestions(filtered);
         }
