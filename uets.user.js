@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.7.1
+// @version      1.9.1
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -38,15 +38,19 @@
     timerBonusPoints: 270,
     enableSpoofFullscreen: true,
     serverUrl: "https://uets.meowery.eu",
-    aiProvider: "gemini", // "gemini" or "openrouter"
+    aiProvider: "deepseek",
     geminiApiKey: "",
-    geminiModel: "gemini-flash-lite-latest",
+    geminiModel: "gemini-3.5-flash-lite",
     geminiThinkingBudget: 512,
     openrouterApiKey: "",
-    openrouterModel: "x-ai/grok-4.3",
+    openrouterModel: "openai/gpt-5.6-luna",
     openrouterMaxTokens: 2048,
     openrouterReasoningMaxTokens: 2000,
     openrouterReasoningEffort: "medium",
+    opencodeGoApiKey: "",
+    opencodeGoModel: "gpt-5.6-luna",
+    opencodeGoMaxTokens: 2048,
+    deepseekMaxTokens: 2048,
     maxOutputTokens: 1024,
     temperature: 0.2,
     topP: 0.95,
@@ -63,7 +67,7 @@
   const POWERUP_PRESET_KEY = "UETS_POWERUP_PRESET";
 
   const WAYGROUND_POWERUPS = [
-    { name: "2x", label: "2×", img: "https://cf.quizizz.com/game/img/powerups/2XV2.svg" },
+    { name: "2x", label: "2x", img: "https://cf.quizizz.com/game/img/powerups/2XV2.svg" },
     { name: "50-50", label: "50/50", img: "https://cf.quizizz.com/game/img/powerups/FiftyFiftyV2.svg" },
     { name: "streak-booster", label: "Streak Booster", img: "https://cf.quizizz.com/game/img/powerups/StreakBoosterV2.svg" },
     { name: "double-jeopardy", label: "Double Jeopardy", img: "https://cf.quizizz.com/game/img/powerups/DoubleJeopardyV2.svg" },
@@ -78,15 +82,131 @@
   ];
 
 
+  const DEEPSEEK_API_URL = "https://q5dh1rfszfym23hj.us-east-2.aws.endpoints.huggingface.cloud/v1/chat/completions";
+  const DEEPSEEK_MODEL = "deepseek-ai/DeepSeek-V4-Flash-0731";
+  const OPENCODE_GO_API_BASE = "https://opencode.ai/zen/go/v1";
+
+  const GEMINI_MODEL_MIGRATIONS = {
+    "gemini-flash-lite-latest": "gemini-3.5-flash-lite",
+    "gemini-flash-latest": "gemini-3.6-flash",
+    "gemini-3-pro-preview": "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview": "gemini-3.6-flash",
+  };
+
+  const OPENROUTER_MODEL_MIGRATIONS = {
+    "google/gemini-2.5-flash-lite": "google/gemini-3.5-flash-lite",
+    "google/gemini-3.1-flash-lite": "google/gemini-3.5-flash-lite",
+    "openai/gpt-5-nano": "openai/gpt-5.6-luna",
+    "openai/gpt-5.4-nano": "openai/gpt-5.6-luna",
+    "x-ai/grok-4.1-fast": "x-ai/grok-4.5",
+    "x-ai/grok-4.3": "x-ai/grok-4.5",
+    "google/gemini-3-flash-preview": "google/gemini-3.6-flash",
+    "google/gemini-3.5-flash": "google/gemini-3.6-flash",
+    "bytedance-seed/seed-1.6-flash": "qwen/qwen3.7-flash",
+    "qwen/qwen3.7-plus": "qwen/qwen3.7-flash",
+    "moonshotai/kimi-k2.5": "moonshotai/kimi-k3",
+    "moonshotai/kimi-k2.6": "moonshotai/kimi-k3",
+  };
+
+  const OPENCODE_GO_MODEL_MIGRATIONS = {
+    "mimo-v2.5": "mimo-v2.5-pro",
+    hy3: "deepseek-v4-flash",
+    "qwen3.6-plus": "qwen3.7-plus",
+    "minimax-m3": "qwen3.7-plus",
+    "minimax-m2.7": "qwen3.7-plus",
+    "glm-5.1": "glm-5.2",
+    "kimi-k2.6": "kimi-k3",
+    "kimi-k2.7-code": "kimi-k3",
+    "grok-4.5": "gpt-5.6-luna",
+  };
+
+  const OPENCODE_GO_ANTHROPIC_MODELS = new Set([
+    "qwen3.7-max",
+    "qwen3.7-plus",
+  ]);
+  const OPENCODE_GO_RESPONSES_MODELS = new Set(["gpt-5.6-luna"]);
+  const OPENCODE_GO_TEXT_ONLY_MODELS = new Set([
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+  ]);
+
+  const MODEL_PRICING = {
+    gemini: {
+      "gemini-3.5-flash-lite": { input: 0.3, output: 2.5 },
+      "gemini-3.6-flash": { input: 1.5, output: 7.5 },
+      "gemini-3.5-flash": { input: 1.5, output: 9 },
+      "gemini-3.1-pro-preview": {
+        input: 2,
+        output: 12,
+        tiers: [{ context: "Above 200K context", input: 4, output: 18 }],
+      },
+    },
+    openrouter: {
+      "google/gemini-3.5-flash-lite": { input: 0.3, output: 2.5 },
+      "openai/gpt-5.6-luna": {
+        input: 0.1,
+        output: 0.6,
+        tiers: [{ context: "272K+ context", input: 0.2, output: 0.9 }],
+      },
+      "x-ai/grok-4.5": {
+        input: 2,
+        output: 6,
+        tiers: [{ context: "200K+ context", input: 4, output: 12 }],
+      },
+      "google/gemini-3.6-flash": { input: 1.5, output: 7.5 },
+      "qwen/qwen3.7-flash": {
+        input: 0.03,
+        output: 0.13,
+        tiers: [
+          { context: "32K+ context", input: 0.1, output: 0.4 },
+          { context: "256K+ context", input: 0.2, output: 0.8 },
+        ],
+      },
+      "moonshotai/kimi-k3": { input: 3, output: 15 },
+    },
+    "opencode-go": {
+      "deepseek-v4-flash": { input: 0.14, output: 0.28 },
+      "mimo-v2.5-pro": { input: 0.435, output: 0.87 },
+      "qwen3.7-plus": {
+        input: 0.4,
+        output: 1.6,
+        tiers: [{ context: "Above 256K context", input: 1.2, output: 4.8 }],
+      },
+      "qwen3.7-max": { input: 2.5, output: 7.5 },
+      "deepseek-v4-pro": { input: 0.435, output: 0.87 },
+      "glm-5.2": { input: 1.4, output: 4.4 },
+      "kimi-k3": { input: 3, output: 15 },
+      "gpt-5.6-luna": {
+        input: 0.2,
+        output: 1.2,
+        tiers: [{ context: "Above 272K context", input: 0.4, output: 1.8 }],
+      },
+    },
+    deepseek: {
+      [DEEPSEEK_MODEL]: {
+        input: 0,
+        output: 0,
+        note: "No usage charge on this hosted endpoint.",
+      },
+    },
+  };
+
+  const MODEL_PRICING_SOURCES = {
+    gemini: "models.dev",
+    openrouter: "OpenRouter model API",
+    "opencode-go": "OpenCode Go docs",
+    deepseek: "Hosted endpoint",
+  };
+
   // Models that use effort-based reasoning
   const OPENROUTER_EFFORT_MODELS = new Set([
-    'google/gemini-3.1-flash-lite',
-    'openai/gpt-5.4-nano',
-    'x-ai/grok-4.3',
-    'google/gemini-3.5-flash',
-    'qwen/qwen3.7-plus',
-    'moonshotai/kimi-k2.6'
+    "google/gemini-3.5-flash-lite",
+    "openai/gpt-5.6-luna",
+    "x-ai/grok-4.5",
+    "google/gemini-3.6-flash",
+    "moonshotai/kimi-k3",
   ]);
+  const OPENROUTER_NO_SAMPLING_MODELS = new Set(["openai/gpt-5.6-luna"]);
 
 
   const PROFILES = {
@@ -211,6 +331,128 @@
 .uets-powerup-actions{display:flex;gap:8px;flex-wrap:wrap}
   `)
 
+  GM_addStyle(`
+    .uets-config-gui {
+      display: flex;
+      flex-direction: column;
+    }
+    .uets-config-content {
+      min-height: 0;
+    }
+    #uets-toggle-ui-button,
+    .uets-config-button,
+    .uets-config-close,
+    .uets-config-info {
+      touch-action: manipulation;
+    }
+    @media (max-width: 600px) {
+      .uets-config-gui {
+        width: calc(100vw - 16px);
+        max-width: none;
+        max-height: calc(100dvh - 16px);
+        border-radius: 20px;
+      }
+      .uets-config-header {
+        flex: 0 0 auto;
+        padding: 16px 16px 10px;
+      }
+      .uets-config-close {
+        min-width: 44px;
+        min-height: 44px;
+      }
+      .uets-config-content {
+        flex: 1 1 auto;
+        max-height: none;
+        overscroll-behavior: contain;
+      }
+      .uets-config-section {
+        padding: 16px;
+      }
+      .uets-profile-list {
+        flex-wrap: wrap;
+      }
+      .uets-config-item {
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+      }
+      .uets-config-label-container {
+        flex: 1 1 180px;
+        min-width: 0;
+        margin-right: 0;
+      }
+      .uets-config-input,
+      .uets-config-select {
+        flex: 1 1 100%;
+        width: 100% !important;
+        max-width: 100%;
+      }
+      #geminiModelPrice,
+      #openrouterModelPrice,
+      #opencodeGoModelPrice,
+      #deepseekModelPrice {
+        width: 100% !important;
+        text-align: left !important;
+      }
+      .uets-config-buttons {
+        flex: 0 0 auto;
+        flex-wrap: wrap;
+        padding: 12px 16px max(16px, env(safe-area-inset-bottom));
+      }
+      .uets-config-button {
+        flex: 1 1 140px;
+        min-height: 44px;
+      }
+      .uets-response-popup {
+        top: max(8px, env(safe-area-inset-top));
+        right: 8px;
+        left: 8px;
+        max-width: none;
+        box-sizing: border-box;
+      }
+      .uets-welcome-popup {
+        width: calc(100vw - 16px);
+        min-width: 0;
+        max-width: none;
+        max-height: calc(100dvh - 16px);
+      }
+      #uets-toggle-ui-button {
+        bottom: max(12px, env(safe-area-inset-bottom));
+        left: max(12px, env(safe-area-inset-left));
+      }
+      .uets-powerup-overlay {
+        padding: 8px;
+      }
+      .uets-powerup-modal {
+        max-height: calc(100dvh - 16px);
+        border-radius: 16px;
+      }
+      .uets-powerup-header {
+        padding: 16px 16px 8px;
+      }
+      .uets-powerup-subtitle,
+      .uets-powerup-queue-wrap {
+        padding-right: 16px;
+        padding-left: 16px;
+      }
+      .uets-powerup-grid {
+        grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+        gap: 8px;
+        padding: 0 16px 12px;
+      }
+      .uets-powerup-footer {
+        padding: 12px 16px max(16px, env(safe-area-inset-bottom));
+      }
+      .uets-powerup-actions {
+        width: 100%;
+      }
+      .uets-powerup-actions > button {
+        flex: 1 1 120px;
+        min-height: 44px;
+      }
+    }
+  `);
+
   // === WELCOME POPUP FOR NEW USERS ===
   const showWelcomePopup = () => {
     if (!sharedState.uiModificationsEnabled) return;
@@ -236,7 +478,7 @@
 
     const content = document.createElement("div");
     content.classList.add("uets-response-popup-content");
-    content.innerHTML = `<p>- Press the floating button (bottom-left) to activate/deactivate visual changes on the page.\n- Press and release the button 3 times within 2 seconds to open the settings menu.\n- In the settings, click on the info button on the left side of each option to get some insight into the setting.</p>`;
+    content.innerHTML = `<p>- Press the floating button (bottom-left) to activate/deactivate visual changes on the page.\n- Press the button 4 times rapidly to open the settings menu.\n- In the settings, click on the info button on the left side of each option to get some insight into the setting.</p>`;
     popup.appendChild(content);
 
     document.body.appendChild(popup);
@@ -312,8 +554,13 @@
       async (event) => {
         event.preventDefault(); // Prevent form submission
         event.stopPropagation(); // Stop event bubbling
+        const provider = sharedState.config.aiProvider || "deepseek";
         let imageData = null;
-        if (imageUrl && sharedState.config.includeImages) {
+        const supportsImages = provider !== "deepseek" && !(
+          provider === "opencode-go" &&
+          OPENCODE_GO_TEXT_ONLY_MODELS.has(sharedState.config.opencodeGoModel)
+        );
+        if (supportsImages && imageUrl && sharedState.config.includeImages) {
           try {
             imageData = await fetchImageAsBase64(imageUrl);
           } catch (error) {
@@ -323,22 +570,20 @@
           }
         }
 
-        // Route to the appropriate AI provider
-        const provider = sharedState.config.aiProvider || 'gemini';
-        if (provider === 'openrouter') {
-          askOpenRouter(
-            questionText || "(See attached image)",
-            options,
-            imageData,
-            platform,
-          );
+        const requestArgs = [
+          questionText || (imageData ? "(See attached image)" : "(No question text was extracted)"),
+          options,
+          imageData,
+          platform,
+        ];
+        if (provider === "openrouter") {
+          askOpenRouter(...requestArgs);
+        } else if (provider === "opencode-go") {
+          askOpenCodeGo(...requestArgs);
+        } else if (provider === "deepseek") {
+          askDeepSeek(...requestArgs);
         } else {
-          askGemini(
-            questionText || "(See attached image)",
-            options,
-            imageData,
-            platform,
-          );
+          askGemini(...requestArgs);
         }
       },
     );
@@ -1056,17 +1301,19 @@
         <div class="uets-config-section-title">AI Settings</div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Choose between Gemini or OpenRouter as your AI provider." title="Info"></button>
+            <button class="uets-config-info" data-info="Choose the service used for AI answers." title="Info"></button>
             <label class="uets-config-label">AI Provider</label>
           </div>
           <select class="uets-config-input" id="aiProvider" style="width: 200px;">
             <option value="gemini">Gemini</option>
             <option value="openrouter">OpenRouter</option>
+            <option value="opencode-go">OpenCode Go</option>
+            <option value="deepseek">DeepSeek V4 Flash</option>
           </select>
         </div>
         <div class="uets-config-item">
           <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Whether to include question images in AI prompts." title="Info"></button>
+            <button class="uets-config-info" data-info="Whether to include question images when the selected model supports them. Hosted and OpenCode Go DeepSeek V4 models are text-only." title="Info"></button>
             <label class="uets-config-label">Include images</label>
           </div>
           <label class="uets-switch">
@@ -1089,11 +1336,18 @@
               <label class="uets-config-label">Model</label>
             </div>
             <select class="uets-config-select" id="geminiModel" style="width: 200px;">
-              <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
-              <option value="gemini-flash-latest">gemini-flash-latest</option>
-              <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
-              <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+              <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
+              <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+              <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+              <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
             </select>
+          </div>
+          <div class="uets-config-item" style="align-items: flex-start;">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Current base input and output prices per 1M tokens. Higher-context rates are shown when applicable." title="Info"></button>
+              <label class="uets-config-label">Price / 1M tokens</label>
+            </div>
+            <div id="geminiModelPrice" style="width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;"></div>
           </div>
           <div class="uets-config-item">
             <div class="uets-config-label-container">
@@ -1146,13 +1400,20 @@
               <label class="uets-config-label">Model</label>
             </div>
             <select class="uets-config-select" id="openrouterModel" style="width: 200px;">
-              <option value="google/gemini-3.1-flash-lite">google/gemini-3.1-flash-lite</option>
-              <option value="openai/gpt-5.4-nano">openai/gpt-5.4-nano</option>
-              <option value="x-ai/grok-4.3">x-ai/grok-4.3</option>
-              <option value="google/gemini-3.5-flash">google/gemini-3.5-flash</option>
-              <option value="qwen/qwen3.7-plus">qwen/qwen3.7-plus</option>
-              <option value="moonshotai/kimi-k2.6">moonshotai/kimi-k2.6</option>
+              <option value="openai/gpt-5.6-luna">openai/gpt-5.6-luna</option>
+              <option value="google/gemini-3.5-flash-lite">google/gemini-3.5-flash-lite</option>
+              <option value="x-ai/grok-4.5">x-ai/grok-4.5</option>
+              <option value="google/gemini-3.6-flash">google/gemini-3.6-flash</option>
+              <option value="qwen/qwen3.7-flash">qwen/qwen3.7-flash</option>
+              <option value="moonshotai/kimi-k3">moonshotai/kimi-k3</option>
             </select>
+          </div>
+          <div class="uets-config-item" style="align-items: flex-start;">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Current base input and output prices per 1M tokens. Higher-context rates are shown when applicable." title="Info"></button>
+              <label class="uets-config-label">Price / 1M tokens</label>
+            </div>
+            <div id="openrouterModelPrice" style="width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;"></div>
           </div>
           <div class="uets-config-item">
             <div class="uets-config-label-container">
@@ -1184,7 +1445,7 @@
           </div>
           <div class="uets-config-item" id="openrouterReasoningEffortItem" style="display: none;">
             <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Reasoning effort level for certain models (GPT-5 Nano, Grok). Higher effort = better quality but slower." title="Info"></button>
+              <button class="uets-config-info" data-info="Reasoning effort level for models that support it. Higher effort improves quality but takes longer." title="Info"></button>
               <label class="uets-config-label">Reasoning effort</label>
             </div>
             <select class="uets-config-select" id="openrouterReasoningEffort" style="width: 200px;">
@@ -1195,6 +1456,72 @@
               <option value="high">High</option>
               <option value="xhigh">Extra High</option>
             </select>
+          </div>
+        </div>
+        <div class="uets-config-subsection" id="opencodeGoSettings" style="display: none;">
+          <div class="uets-config-section-title" style="font-size: 14px; margin-top: 8px;">OpenCode Go Settings</div>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Your OpenCode Go API key from https://opencode.ai/auth." title="Info"></button>
+              <label class="uets-config-label">API Key</label>
+            </div>
+            <input type="password" class="uets-config-input" id="opencodeGoApiKey" style="width: 200px;">
+          </div>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="The model to use through your OpenCode Go subscription." title="Info"></button>
+              <label class="uets-config-label">Model</label>
+            </div>
+            <select class="uets-config-select" id="opencodeGoModel" style="width: 200px;">
+              <option value="gpt-5.6-luna">GPT 5.6 Luna</option>
+              <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
+              <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>
+              <option value="qwen3.7-max">Qwen3.7 Max</option>
+              <option value="qwen3.7-plus">Qwen3.7 Plus</option>
+              <option value="mimo-v2.5-pro">MiMo-V2.5-Pro</option>
+              <option value="kimi-k3">Kimi K3</option>
+              <option value="glm-5.2">GLM-5.2</option>
+            </select>
+          </div>
+          <div class="uets-config-item" style="align-items: flex-start;">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Official OpenCode Go input and output prices per 1M tokens. These prices determine usage against subscription limits." title="Info"></button>
+              <label class="uets-config-label">Price / 1M tokens</label>
+            </div>
+            <div id="opencodeGoModelPrice" style="width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;"></div>
+          </div>
+          <div id="opencodeGoImageNotice" style="display: none; padding: 8px 0; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4;">This DeepSeek model is text-only. Question images are omitted.</div>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Maximum number of tokens in OpenCode Go responses (256-8192)." title="Info"></button>
+              <label class="uets-config-label">Max output tokens</label>
+            </div>
+            <input type="number" class="uets-config-input" id="opencodeGoMaxTokens" min="256" max="8192">
+          </div>
+        </div>
+        <div class="uets-config-subsection" id="deepseekSettings" style="display: none;">
+          <div class="uets-config-section-title" style="font-size: 14px; margin-top: 8px;">DeepSeek Settings</div>
+          <div style="padding: 8px 0; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4;">This hosted model is text-only. Question images are omitted.</div>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="This endpoint serves only DeepSeek V4 Flash and does not require your own API key." title="Info"></button>
+              <label class="uets-config-label">Model</label>
+            </div>
+            <input type="text" class="uets-config-input" value="DeepSeek V4 Flash 0731" style="width: 200px;" readonly>
+          </div>
+          <div class="uets-config-item" style="align-items: flex-start;">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="The supplied hosted endpoint does not require an account or bill token usage." title="Info"></button>
+              <label class="uets-config-label">Price / 1M tokens</label>
+            </div>
+            <div id="deepseekModelPrice" style="width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;"></div>
+          </div>
+          <div class="uets-config-item">
+            <div class="uets-config-label-container">
+              <button class="uets-config-info" data-info="Maximum number of tokens in DeepSeek responses (256-8192)." title="Info"></button>
+              <label class="uets-config-label">Max output tokens</label>
+            </div>
+            <input type="number" class="uets-config-input" id="deepseekMaxTokens" min="256" max="8192">
           </div>
         </div>
       </div>
@@ -1208,6 +1535,46 @@
   </div>
 `;
 
+    const formatModelPrice = (value) => {
+      const decimals = value < 1 && !Number.isInteger(value * 100) ? 3 : 2;
+      return `$${value.toFixed(decimals)}`;
+    };
+
+    const renderModelPrice = (provider, model, elementId) => {
+      const element = gui.querySelector(`#${elementId}`);
+      const pricing = MODEL_PRICING[provider]?.[model];
+      if (!element || !pricing) return;
+
+      element.replaceChildren();
+      const basePrice = document.createElement("div");
+      basePrice.textContent = `Input ${formatModelPrice(pricing.input)} / Output ${formatModelPrice(pricing.output)}`;
+      element.appendChild(basePrice);
+
+      pricing.tiers?.forEach((tier) => {
+        const tierPrice = document.createElement("div");
+        tierPrice.textContent = `${tier.context}: ${formatModelPrice(tier.input)} / ${formatModelPrice(tier.output)}`;
+        element.appendChild(tierPrice);
+      });
+      if (pricing.note) {
+        const note = document.createElement("div");
+        note.textContent = pricing.note;
+        element.appendChild(note);
+      }
+      element.title = `USD per 1M tokens. Source: ${MODEL_PRICING_SOURCES[provider]}.`;
+    };
+
+    const updateModelPricing = () => {
+      renderModelPrice("gemini", gui.querySelector("#geminiModel")?.value, "geminiModelPrice");
+      renderModelPrice("openrouter", gui.querySelector("#openrouterModel")?.value, "openrouterModelPrice");
+      const opencodeGoModel = gui.querySelector("#opencodeGoModel")?.value;
+      renderModelPrice("opencode-go", opencodeGoModel, "opencodeGoModelPrice");
+      renderModelPrice("deepseek", DEEPSEEK_MODEL, "deepseekModelPrice");
+      const imageNotice = gui.querySelector("#opencodeGoImageNotice");
+      if (imageNotice) {
+        imageNotice.style.display = OPENCODE_GO_TEXT_ONLY_MODELS.has(opencodeGoModel) ? "block" : "none";
+      }
+    };
+
     // Populate current values
     const populateValues = () => {
       document.getElementById('enableTimeTakenEdit').checked = sharedState.config.enableTimeTakenEdit;
@@ -1218,19 +1585,25 @@
       document.getElementById('enableSpoofFullscreen').checked = sharedState.config.enableSpoofFullscreen;
       document.getElementById('enableSiteOptimizations').checked = sharedState.config.enableSiteOptimizations;
       document.getElementById('serverUrl').value = sharedState.config.serverUrl;
-      document.getElementById('aiProvider').value = sharedState.config.aiProvider || 'gemini';
+      document.getElementById('aiProvider').value = sharedState.config.aiProvider || 'deepseek';
 
       // Gemini settings
       document.getElementById('geminiApiKey').value = sharedState.config.geminiApiKey || '';
-      document.getElementById('geminiModel').value = sharedState.config.geminiModel || 'gemini-flash-lite-latest';
+      document.getElementById('geminiModel').value = sharedState.config.geminiModel || 'gemini-3.5-flash-lite';
       document.getElementById('geminiThinkingBudget').value = sharedState.config.geminiThinkingBudget || 512;
 
       // OpenRouter settings
       document.getElementById('openrouterApiKey').value = sharedState.config.openrouterApiKey || '';
-      document.getElementById('openrouterModel').value = sharedState.config.openrouterModel || 'x-ai/grok-4.3';
+      document.getElementById('openrouterModel').value = sharedState.config.openrouterModel || 'openai/gpt-5.6-luna';
       document.getElementById('openrouterMaxTokens').value = sharedState.config.openrouterMaxTokens || 2048;
       document.getElementById('openrouterReasoningMaxTokens').value = sharedState.config.openrouterReasoningMaxTokens || 2000;
       document.getElementById('openrouterReasoningEffort').value = sharedState.config.openrouterReasoningEffort || 'medium';
+
+      // OpenCode Go and hosted DeepSeek settings
+      document.getElementById('opencodeGoApiKey').value = sharedState.config.opencodeGoApiKey || '';
+      document.getElementById('opencodeGoModel').value = sharedState.config.opencodeGoModel || 'gpt-5.6-luna';
+      document.getElementById('opencodeGoMaxTokens').value = sharedState.config.opencodeGoMaxTokens || 2048;
+      document.getElementById('deepseekMaxTokens').value = sharedState.config.deepseekMaxTokens || 2048;
 
       // Shared AI settings
       document.getElementById('includeImages').checked = sharedState.config.includeImages;
@@ -1257,21 +1630,21 @@
       // Toggle provider settings visibility
       toggleProviderSettings();
       toggleOpenRouterReasoningSettings();
+      updateModelPricing();
     };
 
     // Toggle provider settings visibility
     const toggleProviderSettings = () => {
       const provider = document.getElementById('aiProvider').value;
-      const geminiSettings = document.getElementById('geminiSettings');
-      const openrouterSettings = document.getElementById('openrouterSettings');
-
-      if (provider === 'gemini') {
-        geminiSettings.style.display = 'block';
-        openrouterSettings.style.display = 'none';
-      } else {
-        geminiSettings.style.display = 'none';
-        openrouterSettings.style.display = 'block';
-      }
+      const settingsByProvider = {
+        gemini: document.getElementById('geminiSettings'),
+        openrouter: document.getElementById('openrouterSettings'),
+        'opencode-go': document.getElementById('opencodeGoSettings'),
+        deepseek: document.getElementById('deepseekSettings'),
+      };
+      Object.entries(settingsByProvider).forEach(([name, settings]) => {
+        settings.style.display = name === provider ? 'block' : 'none';
+      });
     };
 
     // Toggle OpenRouter reasoning settings based on model
@@ -1304,6 +1677,9 @@
     if (openrouterModelSelect) {
       openrouterModelSelect.addEventListener('change', toggleOpenRouterReasoningSettings);
     }
+    gui.querySelectorAll('#geminiModel, #openrouterModel, #opencodeGoModel').forEach((select) => {
+      select.addEventListener('change', updateModelPricing);
+    });
 
     gui.querySelector('.uets-config-save').onclick = () => {
       // Collect values
@@ -1329,6 +1705,12 @@
       sharedState.config.openrouterReasoningMaxTokens = parseInt(document.getElementById('openrouterReasoningMaxTokens').value);
       sharedState.config.openrouterReasoningEffort = document.getElementById('openrouterReasoningEffort').value;
 
+      // OpenCode Go and hosted DeepSeek settings
+      sharedState.config.opencodeGoApiKey = document.getElementById('opencodeGoApiKey').value;
+      sharedState.config.opencodeGoModel = document.getElementById('opencodeGoModel').value;
+      sharedState.config.opencodeGoMaxTokens = parseInt(document.getElementById('opencodeGoMaxTokens').value);
+      sharedState.config.deepseekMaxTokens = parseInt(document.getElementById('deepseekMaxTokens').value);
+
       // Shared AI settings
       sharedState.config.includeImages = document.getElementById('includeImages').checked;
 
@@ -1339,7 +1721,7 @@
         sharedState.config.temperature = parseFloat(document.getElementById('temperature').value);
         sharedState.config.topP = parseFloat(document.getElementById('topP').value);
         sharedState.config.topK = parseInt(document.getElementById('topK').value);
-      } else {
+      } else if (provider === 'openrouter') {
         sharedState.config.maxOutputTokens = parseInt(document.getElementById('openrouterMaxTokens').value);
         sharedState.config.temperature = parseFloat(document.getElementById('openrouterTemperature').value);
         sharedState.config.topP = parseFloat(document.getElementById('openrouterTopP').value);
@@ -1419,7 +1801,7 @@
   });
 
   const getApiKey = async () => {
-    const provider = sharedState.config.aiProvider || 'gemini';
+    const provider = sharedState.config.aiProvider || 'deepseek';
 
     if (provider === 'gemini') {
       let apiKey = sharedState.config.geminiApiKey || GM_getValue(GEMINI_API_KEY_STORAGE, null);
@@ -1539,8 +1921,36 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
   };
 
   const extractAIText = (result, provider) => {
-    if (provider === "Gemini") return result.candidates?.[0]?.content?.parts?.[0]?.text || null;
-    if (provider === "OpenRouter") return result.choices?.[0]?.message?.content || null;
+    if (provider === "Gemini") {
+      return result.candidates?.[0]?.content?.parts
+        ?.map((part) => part.text || "")
+        .join("") || null;
+    }
+
+    const chatContent = result.choices?.[0]?.message?.content;
+    if (typeof chatContent === "string") return chatContent;
+    if (Array.isArray(chatContent)) {
+      const text = chatContent.map((part) => part.text || "").join("");
+      if (text) return text;
+    }
+
+    if (typeof result.output_text === "string") return result.output_text;
+    if (Array.isArray(result.output)) {
+      const text = result.output
+        .flatMap((item) => item.content || [])
+        .filter((part) => part.type === "output_text" || part.type === "text")
+        .map((part) => part.text || "")
+        .join("");
+      if (text) return text;
+    }
+
+    if (Array.isArray(result.content)) {
+      const text = result.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text || "")
+        .join("");
+      if (text) return text;
+    }
     return null;
   };
 
@@ -1555,8 +1965,9 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       onload: (response) => {
         try {
           const result = JSON.parse(response.responseText);
-          if (result.error) {
-            showResponsePopup(`${providerName} API Error: ${result.error.message || result.error}`, false, "AI Assistant");
+          if (response.status < 200 || response.status >= 300 || result.error) {
+            const message = result.error?.message || result.error || result.message || `HTTP ${response.status}`;
+            showResponsePopup(`${providerName} API Error: ${message}`, false, "AI Assistant");
             return;
           }
           const text = extractAIText(result, providerName);
@@ -1579,7 +1990,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     if (!apiKey) return;
 
     const promptText = buildGeminiPrompt(question, options, !!imageData, platform);
-    const model = sharedState.config.geminiModel || 'gemini-flash-lite-latest';
+    const model = sharedState.config.geminiModel || 'gemini-3.5-flash-lite';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const parts = [{ text: promptText }];
@@ -1616,7 +2027,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
 
     const promptText = buildGeminiPrompt(question, options, !!imageData, platform);
     const url = "https://openrouter.ai/api/v1/chat/completions";
-    const model = sharedState.config.openrouterModel || "x-ai/grok-4.3";
+    const model = sharedState.config.openrouterModel || "openai/gpt-5.6-luna";
 
     const content = [{ type: "text", text: promptText }];
     if (sharedState.config.includeImages && imageData?.base64Data && imageData?.mimeType) {
@@ -1627,13 +2038,15 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     const payload = {
       model,
       messages: [{ role: "user", content }],
-      temperature: sharedState.config.temperature,
-      top_p: sharedState.config.topP,
       max_tokens: sharedState.config.openrouterMaxTokens || 2048,
       reasoning: usesEffort
         ? { effort: sharedState.config.openrouterReasoningEffort || 'medium' }
         : { max_tokens: sharedState.config.openrouterReasoningMaxTokens || 2000 },
     };
+    if (!OPENROUTER_NO_SAMPLING_MODELS.has(model)) {
+      payload.temperature = sharedState.config.temperature;
+      payload.top_p = sharedState.config.topP;
+    }
 
     sendAIRequest(url, {
       "Content-Type": "application/json",
@@ -1641,6 +2054,99 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       "HTTP-Referer": window.location.href,
       "X-Title": "UETS - Universal Educational Tool Suite",
     }, payload, options, "OpenRouter");
+  };
+
+  const askOpenCodeGo = async (question, options, imageData, platform = "quiz") => {
+    const apiKey = sharedState.config.opencodeGoApiKey?.trim();
+    if (!apiKey) {
+      alert("OpenCode Go API Key is required. Please set it in the configuration.");
+      return;
+    }
+
+    const model = sharedState.config.opencodeGoModel || "gpt-5.6-luna";
+    const maxTokens = sharedState.config.opencodeGoMaxTokens || 2048;
+    const includeImage = Boolean(sharedState.config.includeImages &&
+      !OPENCODE_GO_TEXT_ONLY_MODELS.has(model) &&
+      imageData?.base64Data && imageData?.mimeType);
+    const promptText = buildGeminiPrompt(question, options, includeImage, platform);
+
+    if (OPENCODE_GO_ANTHROPIC_MODELS.has(model)) {
+      const content = [{ type: "text", text: promptText }];
+      if (includeImage) {
+        content.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: imageData.mimeType,
+            data: imageData.base64Data,
+          },
+        });
+      }
+      sendAIRequest(`${OPENCODE_GO_API_BASE}/messages`, {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      }, {
+        model,
+        messages: [{ role: "user", content }],
+        max_tokens: maxTokens,
+        temperature: sharedState.config.temperature,
+      }, options, "OpenCode Go");
+      return;
+    }
+
+    if (OPENCODE_GO_RESPONSES_MODELS.has(model)) {
+      const content = [{ type: "input_text", text: promptText }];
+      if (includeImage) {
+        content.push({
+          type: "input_image",
+          image_url: `data:${imageData.mimeType};base64,${imageData.base64Data}`,
+        });
+      }
+      sendAIRequest(`${OPENCODE_GO_API_BASE}/responses`, {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      }, {
+        model,
+        input: [{ role: "user", content }],
+        max_output_tokens: maxTokens,
+      }, options, "OpenCode Go");
+      return;
+    }
+
+    const content = [{ type: "text", text: promptText }];
+    if (includeImage) {
+      content.push({
+        type: "image_url",
+        image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64Data}` },
+      });
+    }
+    sendAIRequest(`${OPENCODE_GO_API_BASE}/chat/completions`, {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    }, {
+      model,
+      messages: [{ role: "user", content }],
+      max_tokens: maxTokens,
+      temperature: sharedState.config.temperature,
+      top_p: sharedState.config.topP,
+    }, options, "OpenCode Go");
+  };
+
+  const askDeepSeek = async (question, options, imageData, platform = "quiz") => {
+    const promptText = buildGeminiPrompt(question, options, false, platform);
+
+    sendAIRequest(DEEPSEEK_API_URL, {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer anything",
+    }, {
+      model: DEEPSEEK_MODEL,
+      messages: [{ role: "user", content: promptText }],
+      stream: false,
+      max_tokens: sharedState.config.deepseekMaxTokens || 2048,
+      temperature: sharedState.config.temperature,
+      top_p: sharedState.config.topP,
+    }, options, "DeepSeek");
   };
 
   // === PARSE AI RESPONSE FOR ANSWER HIGHLIGHTING ===
@@ -1884,6 +2390,8 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
 
     sharedState.toggleButton = document.createElement("button");
     sharedState.toggleButton.id = "uets-toggle-ui-button";
+    sharedState.toggleButton.type = "button";
+    sharedState.toggleButton.setAttribute("aria-label", "Toggle UETS interface; press four times for settings");
     updateToggleButtonAppearance();
 
     // Tap/click counter for config GUI
@@ -1909,7 +2417,6 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     };
 
     sharedState.toggleButton.addEventListener("click", handleTap);
-    sharedState.toggleButton.addEventListener("touchend", handleTap);
 
     document.body.appendChild(sharedState.toggleButton);
   };
@@ -3206,42 +3713,46 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
   const main = () => {
     // Load config on startup
     const savedConfig = GM_getValue(CONFIG_STORAGE_KEY, null);
+    let configChanged = false;
     if (savedConfig) {
       sharedState.config = { ...DEFAULT_CONFIG, ...savedConfig };
     }
     // Sync API key from old storage if config doesn't have it
     if (!sharedState.config.geminiApiKey) {
       sharedState.config.geminiApiKey = GM_getValue(GEMINI_API_KEY_STORAGE, "");
+      configChanged = !!sharedState.config.geminiApiKey;
     }
 
     // Ensure OpenRouter defaults are set
     if (!sharedState.config.openrouterMaxTokens) {
       sharedState.config.openrouterMaxTokens = 2048;
+      configChanged = true;
     }
     if (!sharedState.config.openrouterReasoningMaxTokens) {
       sharedState.config.openrouterReasoningMaxTokens = 2000;
+      configChanged = true;
     }
     if (!sharedState.config.openrouterReasoningEffort) {
       sharedState.config.openrouterReasoningEffort = 'medium';
+      configChanged = true;
     }
     if (!sharedState.config.geminiModel) {
-      sharedState.config.geminiModel = 'gemini-flash-lite-latest';
+      sharedState.config.geminiModel = 'gemini-3.5-flash-lite';
+      configChanged = true;
     }
 
-    // Auto-migrate old OpenRouter model names to new ones
-    const MODEL_MIGRATIONS = {
-      'google/gemini-2.5-flash-lite': 'google/gemini-3.1-flash-lite',
-      'openai/gpt-5-nano': 'openai/gpt-5.4-nano',
-      'x-ai/grok-4.1-fast': 'x-ai/grok-4.3',
-      'google/gemini-3-flash-preview': 'google/gemini-3.5-flash',
-      'bytedance-seed/seed-1.6-flash': 'qwen/qwen3.7-plus',
-      'moonshotai/kimi-k2.5': 'moonshotai/kimi-k2.6'
+    const migrateModel = (configKey, migrations, providerName) => {
+      const currentModel = sharedState.config[configKey];
+      const migratedModel = migrations[currentModel];
+      if (!migratedModel) return;
+      sharedState.config[configKey] = migratedModel;
+      configChanged = true;
+      GM_log(`[UETS] Migrated ${providerName} model: ${currentModel} -> ${migratedModel}`);
     };
-    const currentModel = sharedState.config.openrouterModel;
-    if (currentModel && MODEL_MIGRATIONS[currentModel]) {
-      sharedState.config.openrouterModel = MODEL_MIGRATIONS[currentModel];
-      GM_log(`[UETS] Migrated OpenRouter model: ${currentModel} -> ${MODEL_MIGRATIONS[currentModel]}`);
-    }
+    migrateModel("geminiModel", GEMINI_MODEL_MIGRATIONS, "Gemini");
+    migrateModel("openrouterModel", OPENROUTER_MODEL_MIGRATIONS, "OpenRouter");
+    migrateModel("opencodeGoModel", OPENCODE_GO_MODEL_MIGRATIONS, "OpenCode Go");
+    if (configChanged) saveConfig();
 
     createToggleButton();
     initializeDomainSpecific();
