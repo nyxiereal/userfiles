@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.9.1
+// @version      1.11.1
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -56,6 +56,7 @@
     topP: 0.95,
     topK: 64,
     includeImages: true,
+    autoAIWhenUnknown: false,
     enableReactionSpam: false,
     reactionSpamCount: 1,
     reactionSpamDelay: 2000,
@@ -299,12 +300,31 @@
     kahootAnswerCounts: {},
     kahootHasConnected: false,
     detectedAnswers: {},
+    autoAIAsked: new Set(),
+    aiRequestId: 0,
     toastDismissTimeout: null
   };
 
   // === SHARED STYLES ===
-  GM_addStyle(`
-  @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap');@import url('https://fonts.googleapis.com/icon?family=Material+Icons+Outlined');:root{--md-primary:#6750A4;--md-primary-container:#EADDFF;--md-on-primary:#FFFFFF;--md-on-primary-container:#21005D;--md-secondary:#625B71;--md-secondary-container:#E8DEF8;--md-on-secondary:#FFFFFF;--md-on-secondary-container:#1D192B;--md-tertiary:#7D5260;--md-tertiary-container:#FFD8E4;--md-on-tertiary:#FFFFFF;--md-on-tertiary-container:#31111D;--md-surface:#FEF7FF;--md-surface-dim:#DED8E1;--md-surface-bright:#FEF7FF;--md-surface-container-lowest:#FFFFFF;--md-surface-container-low:#F7F2FA;--md-surface-container:#F1ECF4;--md-surface-container-high:#ECE6F0;--md-surface-container-highest:#E6E0E9;--md-on-surface:#1C1B1F;--md-on-surface-variant:#49454F;--md-outline:#79747E;--md-outline-variant:#CAC4D0;--md-error:#B3261E;--md-error-container:#F9DEDC;--md-on-error:#FFFFFF;--md-on-error-container:#410E0B;--md-shadow:#000000}.uets-card{background:var(--md-surface-container);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);overflow:hidden;font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-elevated-card{background:var(--md-surface-container-low);border-radius:12px;box-shadow:0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);overflow:hidden;font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-filled-button{background:var(--md-primary);color:var(--md-on-primary);border:none;border-radius:20px;padding:10px 24px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-filled-button:hover{box-shadow:0 2px 4px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);transform:translateY(-1px)}.uets-filled-button:active{transform:translateY(0px);box-shadow:0 1px 2px rgba(0,0,0,0.12)}.uets-outlined-button{background:transparent;color:var(--md-primary);border:1px solid var(--md-outline);border-radius:20px;padding:10px 24px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-outlined-button:hover{background:rgba(103, 80, 164, 0.08);border-color:var(--md-primary)}.uets-text-button{background:transparent;color:var(--md-primary);border:none;border-radius:20px;padding:10px 12px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-text-button:hover{background:rgba(103, 80, 164, 0.08)}.uets-fab{background:var(--md-primary-container);color:var(--md-on-primary-container);border:none;border-radius:16px;width:56px;height:56px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.2), 0 6px 10px rgba(0,0,0,0.14), 0 1px 18px rgba(0,0,0,0.12);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);font-size:24px}.uets-fab:hover{box-shadow:0 5px 5px rgba(0,0,0,0.2), 0 9px 18px rgba(0,0,0,0.14), 0 3px 14px rgba(0,0,0,0.12);transform:scale(1.05)}.uets-fab.uets-mods-hidden-state{background:transparent;box-shadow:none}.uets-fab.uets-mods-hidden-state:hover{background:rgba(103, 80, 164, 0.08);box-shadow:none;transform:scale(1.05)}.uets-success-button{background:#a6e3a1;color:white}.uets-warning-button{background:#fab387;color:white}.uets-purple-button{background:#cba6f7;color:white}.uets-ai-button,.uets-copy-prompt-button,.uets-ddg-button,.uets-ddg-link,.uets-gemini-button,.uets-get-answer-button{display:inline-flex;align-items:center;gap:8px;padding:4px 8px;color:var(--md-on-primary);text-decoration:none;border-radius:20px;font-size:14px;font-weight:500;cursor:pointer;text-align:center;vertical-align:middle;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);border:none;font-family:'Roboto', sans-serif;min-height:40px;margin:1px;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)}.uets-ai-button:hover,.uets-copy-prompt-button:hover,.uets-ddg-button:hover,.uets-ddg-link:hover,.uets-gemini-button:hover,.uets-get-answer-button:hover{box-shadow:0 4px 8px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.1);transform:translateY(-2px)}.uets-ddg-button,.uets-ddg-link{background:#a6e3a1 !important;color:white !important}.uets-ai-button,.uets-gemini-button{background:#74c7ec !important;color:white !important}.uets-copy-prompt-button{background:#fab387 !important;color:white !important}.uets-get-answer-button{background:#cba6f7 !important;color:white !important}.uets-ddg-button::before,.uets-ddg-link::before{content:'search';font-family:'Material Icons Outlined';font-size:18px}.uets-ai-button::before,.uets-gemini-button::before{content:'psychology';font-family:'Material Icons Outlined';font-size:18px}.uets-copy-prompt-button::before{content:'content_copy';font-family:'Material Icons Outlined';font-size:18px}.uets-get-answer-button::before{content:'lightbulb';font-family:'Material Icons Outlined';font-size:18px}.uets-option-wrapper{display:flex;flex-direction:column;align-items:stretch;justify-content:space-between;height:100%}.uets-option-wrapper > button.option{display:flex;flex-direction:column;flex-grow:1;min-height:0;width:100%}.uets-ddg-link-option-item{width:100%;box-sizing:border-box;margin-top:12px;padding:8px 0;border-radius:0 0 12px 12px;flex-shrink:0}.uets-main-question-buttons-container{display:flex;justify-content:center;gap:4px;background:#313244;border-radius:12px;margin:1px;flex-wrap:wrap;padding:2px}.uets-response-popup{position:fixed;top:20px;right:20px;background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:12px;padding:16px 20px;z-index:10004;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;font-size:14px;line-height:20px;animation:slideInRight 0.3s ease-out;cursor:pointer;display:flex;align-items:flex-start;gap:12px}@keyframes slideInRight{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes slideOutRight{from{transform:translateX(0);opacity:1}to{transform:translateX(400px);opacity:0}}.uets-response-popup.uets-toast-dismiss{animation:slideOutRight 0.3s ease-in forwards}.uets-response-popup-header{display:none}.uets-response-popup-content{white-space:normal;font-size:14px;line-height:20px;color:var(--md-on-surface);padding:0;max-height:none;overflow:visible;flex:1}.uets-response-popup-close{background:none;border:none;width:24px;height:24px;border-radius:12px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:20px;padding:0;flex-shrink:0}.uets-response-popup-close::before{content:'close'}.uets-response-popup-close:hover{background:rgba(103, 80, 164, 0.08);color:var(--md-primary)}.uets-response-popup-loading{text-align:center;font-style:normal;color:var(--md-on-surface-variant);padding:0;font-size:14px;display:flex;flex-direction:column;align-items:center;gap:8px}.uets-welcome-popup{position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:28px;padding:0;z-index:10004;min-width:320px;max-width:90vh;max-height:80vh;overflow:hidden;box-shadow:0 10px 25px rgba(0,0,0,0.35), 0 6px 10px rgba(0,0,0,0.25);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif !important;font-size:18px}.uets-response-popup-header{display:flex;justify-content:space-between;align-items:center;padding:24px 24px 0;margin-bottom:16px}.uets-response-popup-title{font-weight:600;font-size:22px;color:var(--md-on-surface);line-height:28px}.uets-response-popup-close{background:none;border:none;width:48px;height:48px;border-radius:24px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:24px}.uets-response-popup-close::before{content:'close'}.uets-response-popup-close:hover{background:rgba(103, 80, 164, 0.08);color:var(--md-primary)}.uets-response-popup-content{white-space:pre-wrap;font-size:14px;line-height:20px;color:var(--md-on-surface);padding:0 24px 24px;max-height:calc(80vh - 120px);overflow-y:auto}.uets-response-popup-content b,.uets-response-popup-content strong{color:var(--md-primary);font-weight:600}.uets-response-popup-loading{text-align:center;font-style:normal;color:var(--md-on-surface-variant);padding:40px 24px;font-size:16px;display:flex;flex-direction:column;align-items:center;gap:16px}.uets-loading-spinner{width:32px;height:32px;border:3px solid var(--md-outline-variant);border-top:3px solid var(--md-primary);border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}#uets-toggle-ui-button{position:fixed;bottom:20px;left:20px;z-index:10002;background:var(--md-primary-container);color:var(--md-on-primary-container);border:none;border-radius:16px;width:56px;height:56px;cursor:pointer;box-shadow:0 3px 5px rgba(0,0,0,0.2), 0 6px 10px rgba(0,0,0,0.14), 0 1px 18px rgba(0,0,0,0.12);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);user-select:none;display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:24px}#uets-toggle-ui-button:hover{box-shadow:0 5px 5px rgba(0,0,0,0.2), 0 9px 18px rgba(0,0,0,0.14), 0 3px 14px rgba(0,0,0,0.12);transform:scale(1.05)}#uets-toggle-ui-button.uets-mods-hidden-state{background:transparent;box-shadow:none}#uets-toggle-ui-button.uets-mods-hidden-state:hover{background:rgba(103, 80, 164, 0.08);box-shadow:none}.uets-correct-answer{background:rgba(76, 175, 80, 0.2) !important;border:3px solid #4CAF50 !important;border-radius:12px !important;box-shadow:0 0 12px rgba(76, 175, 80, 0.5), inset 0 0 8px rgba(76, 175, 80, 0.15) !important;animation:uets-correct-pulse 2s ease-in-out infinite !important}@keyframes uets-correct-pulse{0%,100%{box-shadow:0 0 12px rgba(76, 175, 80, 0.5), inset 0 0 8px rgba(76, 175, 80, 0.15)}50%{box-shadow:0 0 20px rgba(76, 175, 80, 0.7), inset 0 0 12px rgba(76, 175, 80, 0.25)}}.uets-answer-indicator{position:absolute;top:8px;right:8px;background:linear-gradient(135deg, #4CAF50, #45a049);color:white;padding:6px 10px;border-radius:16px;font-size:14px;font-weight:700;z-index:1000;font-family:'Material Icons Outlined';display:flex;align-items:center;justify-content:center;gap:4px;box-shadow:0 2px 8px rgba(76, 175, 80, 0.4)}.uets-answer-indicator::before{content:'star';font-size:18px}.uets-answer-indicator::after{content:'Correct';font-family:'Roboto', sans-serif;font-size:12px;font-weight:600}.uets-streak-bonus{margin-left:8px;color:#FFD700;font-weight:600;font-size:14px;text-shadow:1px 1px 2px rgba(0,0,0,0.3);font-family:'Roboto', sans-serif}.uets-config-gui{position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);background:var(--md-surface);color:var(--md-on-surface);border-radius:28px;padding:0;z-index:10003;width:640px;max-width:90vw;max-height:90vh;overflow:hidden;box-shadow:0 24px 38px rgba(0,0,0,0.14), 0 9px 46px rgba(0,0,0,0.12), 0 11px 15px rgba(0,0,0,0.20);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-config-header{display:flex;justify-content:space-between;align-items:center;padding:24px 24px 12px;border-bottom:1px solid var(--md-outline-variant)}.uets-config-title{font-size:24px;font-weight:400;color:var(--md-on-surface);line-height:32px;letter-spacing:0}.uets-config-close{background:none;border:none;width:40px;height:40px;border-radius:20px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:20px}.uets-config-close::before{content:'close'}.uets-config-close:hover{background:var(--md-surface-container-highest);color:var(--md-on-surface)}.uets-config-content{max-height:calc(90vh - 200px);overflow-y:auto}.uets-config-section{margin-bottom:8px;padding:16px 24px}.uets-config-section-title{font-size:16px;font-weight:500;margin-bottom:16px;color:var(--md-primary);line-height:24px;letter-spacing:0.1px}.uets-config-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;min-height:56px}.uets-config-label-container{display:flex;align-items:center;flex:1;margin-right:16px}.uets-config-label{font-size:16px;font-weight:400;color:var(--md-on-surface);margin-left:12px;line-height:24px;letter-spacing:0.5px}.uets-config-input,.uets-config-select{background:var(--md-surface-container-highest);border:1px solid var(--md-outline);border-radius:4px;padding:16px;color:var(--md-on-surface);font-size:16px;font-family:'Roboto', sans-serif;width:200px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);box-sizing:border-box}.uets-config-input:focus,.uets-config-select:focus{outline:none;border-color:var(--md-primary);border-width:2px;padding:15px}.uets-config-input:disabled{background:var(--md-surface-variant);color:var(--md-on-surface-variant);border-color:var(--md-outline-variant)}.uets-switch{position:relative;display:inline-block;width:52px;height:32px;cursor:pointer}.uets-switch input{opacity:0;width:0;height:0}.uets-switch-slider{position:absolute;top:0;left:0;right:0;bottom:0;background:var(--md-outline);border-radius:16px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);border:2px solid var(--md-outline)}.uets-switch-slider:before{position:absolute;content:"";height:20px;width:20px;left:4px;bottom:4px;background:var(--md-surface-container-highest);border-radius:50%;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);box-shadow:0 1px 3px rgba(0,0,0,0.4)}.uets-switch input:checked + .uets-switch-slider{background:var(--md-primary);border-color:var(--md-primary)}.uets-switch input:checked + .uets-switch-slider:before{transform:translateX(20px);background:var(--md-on-primary)}.uets-switch:hover .uets-switch-slider{box-shadow:0 0 0 8px rgba(103, 80, 164, 0.04)}.uets-switch input:checked:hover + .uets-switch-slider{box-shadow:0 0 0 8px rgba(103, 80, 164, 0.08)}.uets-config-info{background:var(--md-secondary-container);color:var(--md-on-secondary-container);border:none;border-radius:50%;width:22px;height:22px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);font-weight:500}.uets-config-info::before{content:'help';font-size:20px}.uets-config-info:hover{background:var(--md-secondary);color:var(--md-on-secondary);transform:scale(1.1)}.uets-config-buttons{display:flex;justify-content:flex-end;gap:8px;padding:16px 24px 24px;border-top:1px solid var(--md-outline-variant);background:var(--md-surface-container-low)}.uets-config-button{padding:10px 24px;border:none;border-radius:20px;cursor:pointer;font-size:14px;font-weight:500;font-family:'Roboto', sans-serif;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:inline-flex;align-items:center;gap:8px;min-height:40px;justify-content:center;letter-spacing:0.1px}.uets-config-save{background:var(--md-primary);color:var(--md-on-primary)}.uets-config-save::before{content:'save';font-family:'Material Icons Outlined';font-size:18px}.uets-config-save:hover{box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);background:#5a4089}.uets-config-reset{background:var(--md-error);color:var(--md-on-error)}.uets-config-reset::before{content:'refresh';font-family:'Material Icons Outlined';font-size:18px}.uets-config-reset:hover{box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);background:#a02117}.uets-config-cancel{background:transparent;color:var(--md-primary);border:1px solid var(--md-outline)}.uets-config-cancel::before{content:'cancel';font-family:'Material Icons Outlined';font-size:18px}.uets-config-cancel:hover{background:var(--md-surface-container-highest);border-color:var(--md-primary)}.uets-config-content::-webkit-scrollbar{width:8px}.uets-config-content::-webkit-scrollbar-track{background:var(--md-surface-container-low)}.uets-config-content::-webkit-scrollbar-thumb{background:var(--md-outline-variant);border-radius:4px}.uets-config-content::-webkit-scrollbar-thumb:hover{background:var(--md-outline)}.uets-profile-selector{margin:4px;padding:16px;background:var(--md-surface-container-low);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.12)}.uets-profile-list{display:flex;gap:8px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--md-outline-variant) transparent}.uets-profile-list::-webkit-scrollbar{height:6px}.uets-profile-list::-webkit-scrollbar-track{background:transparent}.uets-profile-list::-webkit-scrollbar-thumb{background:var(--md-outline-variant);border-radius:3px}.uets-profile-list::-webkit-scrollbar-thumb:hover{background:var(--md-outline)}.uets-profile-button{background:var(--md-surface-container-highest);color:var(--md-on-surface);border:1px solid var(--md-outline);border-radius:20px;padding:8px 16px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;white-space:nowrap;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);flex-shrink:0}.uets-profile-button:hover{background:var(--md-surface-container);border-color:var(--md-primary)}.uets-profile-button.active{background:var(--md-primary);color:var(--md-on-primary);border-color:var(--md-primary)}.uets-profile-button.active:hover{background:#5a4089}@media (prefers-color-scheme: dark){:root{--md-primary:#D0BCFF;--md-primary-container:#4F378B;--md-on-primary:#371E73;--md-on-primary-container:#EADDFF;--md-secondary:#CCC2DC;--md-secondary-container:#4A4458;--md-on-secondary:#332D41;--md-on-secondary-container:#E8DEF8;--md-tertiary:#EFB8C8;--md-tertiary-container:#633B48;--md-on-tertiary:#492532;--md-on-tertiary-container:#FFD8E4;--md-surface:#141218;--md-surface-dim:#141218;--md-surface-bright:#3B383E;--md-surface-container-lowest:#0F0D13;--md-surface-container-low:#1D1B20;--md-surface-container:#211F26;--md-surface-container-high:#2B2930;--md-surface-container-highest:#36343B;--md-on-surface:#E6E0E9;--md-on-surface-variant:#CAC4D0;--md-outline:#938F99;--md-outline-variant:#49454F;--md-error:#F2B8B5;--md-error-container:#8C1D18;--md-on-error:#601410;--md-on-error-container:#F9DEDC;--md-shadow:#000000}}.kahoot-answer-indicator{position:absolute;top:12px;right:18px;min-width:24px;height:24px;background:linear-gradient(135deg, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0.7) 100%);color:#fff;padding:0 8px;border-radius:12px;font-size:15px;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.18);display:flex;align-items:center;justify-content:center;border:2px solid #fff2;z-index:1000;pointer-events:none;user-select:none;transition:transform 0.15s}.kahoot-answer-button{position:relative}
+  // Everything UETS renders is tagged .sentry-ignore. Sentry Session Replay (used by
+  // Wayground) skips ignored nodes, so the injected CSS text and the whole UETS UI stay
+  // out of the session replay the site operator can watch back.
+  const hideFromReplay = (el) => {
+    if (el) el.classList.add("sentry-ignore");
+    return el;
+  };
+
+  const injectStyle = (css) => {
+    // GM_addStyle injects through the extension, so page CSP rules can't block our CSS.
+    // Violentmonkey >= 2.12 returns the injected <style> synchronously; older versions
+    // return undefined, in which case the style just stays unmarked.
+    const style = GM_addStyle(css);
+    if (style && style.nodeType === Node.ELEMENT_NODE) hideFromReplay(style);
+    return style;
+  };
+
+  injectStyle(`
+  @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap');@import url('https://fonts.googleapis.com/icon?family=Material+Icons+Outlined');:root{--md-primary:#6750A4;--md-primary-container:#EADDFF;--md-on-primary:#FFFFFF;--md-on-primary-container:#21005D;--md-secondary:#625B71;--md-secondary-container:#E8DEF8;--md-on-secondary:#FFFFFF;--md-on-secondary-container:#1D192B;--md-tertiary:#7D5260;--md-tertiary-container:#FFD8E4;--md-on-tertiary:#FFFFFF;--md-on-tertiary-container:#31111D;--md-surface:#FEF7FF;--md-surface-dim:#DED8E1;--md-surface-bright:#FEF7FF;--md-surface-container-lowest:#FFFFFF;--md-surface-container-low:#F7F2FA;--md-surface-container:#F1ECF4;--md-surface-container-high:#ECE6F0;--md-surface-container-highest:#E6E0E9;--md-on-surface:#1C1B1F;--md-on-surface-variant:#49454F;--md-outline:#79747E;--md-outline-variant:#CAC4D0;--md-error:#B3261E;--md-error-container:#F9DEDC;--md-on-error:#FFFFFF;--md-on-error-container:#410E0B;--md-shadow:#000000}.uets-card{background:var(--md-surface-container);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);overflow:hidden;font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-elevated-card{background:var(--md-surface-container-low);border-radius:12px;box-shadow:0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);overflow:hidden;font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-filled-button{background:var(--md-primary);color:var(--md-on-primary);border:none;border-radius:20px;padding:10px 24px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-filled-button:hover{box-shadow:0 2px 4px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);transform:translateY(-1px)}.uets-filled-button:active{transform:translateY(0px);box-shadow:0 1px 2px rgba(0,0,0,0.12)}.uets-outlined-button{background:transparent;color:var(--md-primary);border:1px solid var(--md-outline);border-radius:20px;padding:10px 24px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-outlined-button:hover{background:rgba(103, 80, 164, 0.08);border-color:var(--md-primary)}.uets-text-button{background:transparent;color:var(--md-primary);border:none;border-radius:20px;padding:10px 12px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);text-decoration:none;min-height:40px;justify-content:center}.uets-text-button:hover{background:rgba(103, 80, 164, 0.08)}.uets-fab{background:var(--md-primary-container);color:var(--md-on-primary-container);border:none;border-radius:16px;width:56px;height:56px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 5px rgba(0,0,0,0.2), 0 6px 10px rgba(0,0,0,0.14), 0 1px 18px rgba(0,0,0,0.12);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);font-size:24px}.uets-fab:hover{box-shadow:0 5px 5px rgba(0,0,0,0.2), 0 9px 18px rgba(0,0,0,0.14), 0 3px 14px rgba(0,0,0,0.12);transform:scale(1.05)}.uets-fab.uets-mods-hidden-state{background:transparent;box-shadow:none}.uets-fab.uets-mods-hidden-state:hover{background:rgba(103, 80, 164, 0.08);box-shadow:none;transform:scale(1.05)}.uets-success-button{background:#a6e3a1;color:white}.uets-warning-button{background:#fab387;color:white}.uets-purple-button{background:#cba6f7;color:white}.uets-ai-button,.uets-copy-prompt-button,.uets-ddg-button,.uets-ddg-link,.uets-gemini-button,.uets-get-answer-button{display:inline-flex;align-items:center;gap:8px;padding:4px 8px;color:var(--md-on-primary);text-decoration:none;border-radius:20px;font-size:14px;font-weight:500;cursor:pointer;text-align:center;vertical-align:middle;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);border:none;font-family:'Roboto', sans-serif;min-height:40px;margin:1px;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)}.uets-ai-button:hover,.uets-copy-prompt-button:hover,.uets-ddg-button:hover,.uets-ddg-link:hover,.uets-gemini-button:hover,.uets-get-answer-button:hover{box-shadow:0 4px 8px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.1);transform:translateY(-2px)}.uets-ddg-button,.uets-ddg-link{background:#a6e3a1 !important;color:#11111b !important}.uets-ai-button,.uets-gemini-button{background:#74c7ec !important;color:#11111b !important}.uets-copy-prompt-button{background:#fab387 !important;color:#11111b !important}.uets-get-answer-button{background:#cba6f7 !important;color:#11111b !important}.uets-ddg-button::before,.uets-ddg-link::before{content:'search';font-family:'Material Icons Outlined';font-size:18px}.uets-ai-button::before,.uets-gemini-button::before{content:'psychology';font-family:'Material Icons Outlined';font-size:18px}.uets-copy-prompt-button::before{content:'content_copy';font-family:'Material Icons Outlined';font-size:18px}.uets-get-answer-button::before{content:'lightbulb';font-family:'Material Icons Outlined';font-size:18px}.uets-option-wrapper{display:flex;flex-direction:column;align-items:stretch;justify-content:space-between;height:100%}.uets-option-wrapper > button.option{display:flex;flex-direction:column;flex-grow:1;min-height:0;width:100%}.uets-ddg-link-option-item{width:100%;box-sizing:border-box;margin-top:12px;padding:8px 0;border-radius:0 0 12px 12px;flex-shrink:0}.uets-main-question-buttons-container{display:flex;justify-content:center;gap:4px;background:#313244;border-radius:12px;margin:1px;flex-wrap:wrap;padding:2px}.uets-response-popup{position:fixed;top:20px;right:20px;background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:12px;padding:16px 20px;z-index:10004;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;font-size:14px;line-height:20px;animation:slideInRight 0.3s ease-out;cursor:pointer;display:flex;align-items:flex-start;gap:12px}@keyframes slideInRight{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}@keyframes slideOutRight{from{transform:translateX(0);opacity:1}to{transform:translateX(400px);opacity:0}}.uets-response-popup.uets-toast-dismiss{animation:slideOutRight 0.3s ease-in forwards}.uets-response-popup-header{display:none}.uets-response-popup-content{white-space:normal;font-size:14px;line-height:20px;color:var(--md-on-surface);padding:0;max-height:none;overflow:visible;flex:1}.uets-response-popup-close{background:none;border:none;width:24px;height:24px;border-radius:12px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:20px;padding:0;flex-shrink:0}.uets-response-popup-close::before{content:'close'}.uets-response-popup-close:hover{background:rgba(103, 80, 164, 0.08);color:var(--md-primary)}.uets-response-popup-loading{text-align:center;font-style:normal;color:var(--md-on-surface-variant);padding:0;font-size:14px;display:flex;flex-direction:column;align-items:center;gap:8px}.uets-welcome-popup{position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:28px;padding:0;z-index:10004;min-width:320px;max-width:90vh;max-height:80vh;overflow:hidden;box-shadow:0 10px 25px rgba(0,0,0,0.35), 0 6px 10px rgba(0,0,0,0.25);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif !important;font-size:18px}.uets-response-popup-header{display:flex;justify-content:space-between;align-items:center;padding:24px 24px 0;margin-bottom:16px}.uets-response-popup-title{font-weight:600;font-size:22px;color:var(--md-on-surface);line-height:28px}.uets-response-popup-close{background:none;border:none;width:48px;height:48px;border-radius:24px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:24px}.uets-response-popup-close::before{content:'close'}.uets-response-popup-close:hover{background:rgba(103, 80, 164, 0.08);color:var(--md-primary)}.uets-response-popup-content{white-space:pre-wrap;font-size:14px;line-height:20px;color:var(--md-on-surface);padding:0 24px 24px;max-height:calc(80vh - 120px);overflow-y:auto}.uets-response-popup-content b,.uets-response-popup-content strong{color:var(--md-primary);font-weight:600}.uets-response-popup-loading{text-align:center;font-style:normal;color:var(--md-on-surface-variant);padding:40px 24px;font-size:16px;display:flex;flex-direction:column;align-items:center;gap:16px}.uets-loading-spinner{width:32px;height:32px;border:3px solid var(--md-outline-variant);border-top:3px solid var(--md-primary);border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}#uets-toggle-ui-button{position:fixed;bottom:20px;left:20px;z-index:10002;background:var(--md-primary-container);color:var(--md-on-primary-container);border:none;border-radius:16px;width:56px;height:56px;cursor:pointer;box-shadow:0 3px 5px rgba(0,0,0,0.2), 0 6px 10px rgba(0,0,0,0.14), 0 1px 18px rgba(0,0,0,0.12);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);user-select:none;display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:24px}#uets-toggle-ui-button:hover{box-shadow:0 5px 5px rgba(0,0,0,0.2), 0 9px 18px rgba(0,0,0,0.14), 0 3px 14px rgba(0,0,0,0.12);transform:scale(1.05)}#uets-toggle-ui-button.uets-mods-hidden-state{background:transparent;box-shadow:none}#uets-toggle-ui-button.uets-mods-hidden-state:hover{background:rgba(103, 80, 164, 0.08);box-shadow:none}.uets-correct-answer{background:rgba(76, 175, 80, 0.2) !important;border:3px solid #4CAF50 !important;border-radius:12px !important;box-shadow:0 0 12px rgba(76, 175, 80, 0.5), inset 0 0 8px rgba(76, 175, 80, 0.15) !important;animation:uets-correct-pulse 2s ease-in-out infinite !important}@keyframes uets-correct-pulse{0%,100%{box-shadow:0 0 12px rgba(76, 175, 80, 0.5), inset 0 0 8px rgba(76, 175, 80, 0.15)}50%{box-shadow:0 0 20px rgba(76, 175, 80, 0.7), inset 0 0 12px rgba(76, 175, 80, 0.25)}}.uets-answer-indicator{position:absolute;top:8px;right:8px;background:linear-gradient(135deg, #4CAF50, #45a049);color:white;padding:6px 10px;border-radius:16px;font-size:14px;font-weight:700;z-index:1000;font-family:'Material Icons Outlined';display:flex;align-items:center;justify-content:center;gap:4px;box-shadow:0 2px 8px rgba(76, 175, 80, 0.4)}.uets-answer-indicator::before{content:'star';font-size:18px}.uets-answer-indicator::after{content:'Correct';font-family:'Roboto', sans-serif;font-size:12px;font-weight:600}.uets-streak-bonus{margin-left:8px;color:#FFD700;font-weight:600;font-size:14px;text-shadow:1px 1px 2px rgba(0,0,0,0.3);font-family:'Roboto', sans-serif}.uets-config-gui{position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);background:var(--md-surface);color:var(--md-on-surface);border-radius:28px;padding:0;z-index:10003;width:640px;max-width:90vw;max-height:90vh;overflow:hidden;box-shadow:0 24px 38px rgba(0,0,0,0.14), 0 9px 46px rgba(0,0,0,0.12), 0 11px 15px rgba(0,0,0,0.20);font-family:'Roboto', -apple-system, BlinkMacSystemFont, sans-serif}.uets-config-header{display:flex;justify-content:space-between;align-items:center;padding:24px 24px 12px;border-bottom:1px solid var(--md-outline-variant)}.uets-config-title{font-size:24px;font-weight:400;color:var(--md-on-surface);line-height:32px;letter-spacing:0}.uets-config-close{background:none;border:none;width:40px;height:40px;border-radius:20px;cursor:pointer;color:var(--md-on-surface-variant);transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';font-size:20px}.uets-config-close::before{content:'close'}.uets-config-close:hover{background:var(--md-surface-container-highest);color:var(--md-on-surface)}.uets-config-content{max-height:calc(90vh - 200px);overflow-y:auto}.uets-config-section{margin-bottom:8px;padding:16px 24px}.uets-config-section-title{font-size:16px;font-weight:500;margin-bottom:16px;color:var(--md-primary);line-height:24px;letter-spacing:0.1px}.uets-config-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;min-height:56px}.uets-config-label-container{display:flex;align-items:center;flex:1;margin-right:16px}.uets-config-label{font-size:16px;font-weight:400;color:var(--md-on-surface);margin-left:12px;line-height:24px;letter-spacing:0.5px}.uets-config-input,.uets-config-select{background:var(--md-surface-container-highest);border:1px solid var(--md-outline);border-radius:4px;padding:16px;color:var(--md-on-surface);font-size:16px;font-family:'Roboto', sans-serif;width:200px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);box-sizing:border-box}.uets-config-input:focus,.uets-config-select:focus{outline:none;border-color:var(--md-primary);border-width:2px;padding:15px}.uets-config-input:disabled{background:var(--md-surface-variant);color:var(--md-on-surface-variant);border-color:var(--md-outline-variant)}.uets-switch{position:relative;display:inline-block;width:52px;height:32px;cursor:pointer}.uets-switch input{opacity:0;width:0;height:0}.uets-switch-slider{position:absolute;top:0;left:0;right:0;bottom:0;background:var(--md-outline);border-radius:16px;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);border:2px solid var(--md-outline)}.uets-switch-slider:before{position:absolute;content:"";height:20px;width:20px;left:4px;bottom:4px;background:var(--md-surface-container-highest);border-radius:50%;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);box-shadow:0 1px 3px rgba(0,0,0,0.4)}.uets-switch input:checked + .uets-switch-slider{background:var(--md-primary);border-color:var(--md-primary)}.uets-switch input:checked + .uets-switch-slider:before{transform:translateX(20px);background:var(--md-on-primary)}.uets-switch:hover .uets-switch-slider{box-shadow:0 0 0 8px rgba(103, 80, 164, 0.04)}.uets-switch input:checked:hover + .uets-switch-slider{box-shadow:0 0 0 8px rgba(103, 80, 164, 0.08)}.uets-config-info{background:var(--md-secondary-container);color:var(--md-on-secondary-container);border:none;border-radius:50%;width:22px;height:22px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:'Material Icons Outlined';transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);font-weight:500}.uets-config-info::before{content:'help';font-size:20px}.uets-config-info:hover{background:var(--md-secondary);color:var(--md-on-secondary);transform:scale(1.1)}.uets-config-buttons{display:flex;justify-content:flex-end;gap:8px;padding:16px 24px 24px;border-top:1px solid var(--md-outline-variant);background:var(--md-surface-container-low)}.uets-config-button{padding:10px 24px;border:none;border-radius:20px;cursor:pointer;font-size:14px;font-weight:500;font-family:'Roboto', sans-serif;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);display:inline-flex;align-items:center;gap:8px;min-height:40px;justify-content:center;letter-spacing:0.1px}.uets-config-save{background:var(--md-primary);color:var(--md-on-primary)}.uets-config-save::before{content:'save';font-family:'Material Icons Outlined';font-size:18px}.uets-config-save:hover{box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);background:#5a4089}.uets-config-reset{background:var(--md-error);color:var(--md-on-error)}.uets-config-reset::before{content:'refresh';font-family:'Material Icons Outlined';font-size:18px}.uets-config-reset:hover{box-shadow:0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);background:#a02117}.uets-config-cancel{background:transparent;color:var(--md-primary);border:1px solid var(--md-outline)}.uets-config-cancel::before{content:'cancel';font-family:'Material Icons Outlined';font-size:18px}.uets-config-cancel:hover{background:var(--md-surface-container-highest);border-color:var(--md-primary)}.uets-config-content::-webkit-scrollbar{width:8px}.uets-config-content::-webkit-scrollbar-track{background:var(--md-surface-container-low)}.uets-config-content::-webkit-scrollbar-thumb{background:var(--md-outline-variant);border-radius:4px}.uets-config-content::-webkit-scrollbar-thumb:hover{background:var(--md-outline)}.uets-profile-selector{margin:4px;padding:16px;background:var(--md-surface-container-low);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.12)}.uets-profile-list{display:flex;gap:8px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--md-outline-variant) transparent}.uets-profile-list::-webkit-scrollbar{height:6px}.uets-profile-list::-webkit-scrollbar-track{background:transparent}.uets-profile-list::-webkit-scrollbar-thumb{background:var(--md-outline-variant);border-radius:3px}.uets-profile-list::-webkit-scrollbar-thumb:hover{background:var(--md-outline)}.uets-profile-button{background:var(--md-surface-container-highest);color:var(--md-on-surface);border:1px solid var(--md-outline);border-radius:20px;padding:8px 16px;font-family:'Roboto', sans-serif;font-weight:500;font-size:14px;cursor:pointer;white-space:nowrap;transition:all 0.2s cubic-bezier(0.2, 0, 0, 1);flex-shrink:0}.uets-profile-button:hover{background:var(--md-surface-container);border-color:var(--md-primary)}.uets-profile-button.active{background:var(--md-primary);color:var(--md-on-primary);border-color:var(--md-primary)}.uets-profile-button.active:hover{background:#5a4089}@media (prefers-color-scheme: dark){:root{--md-primary:#D0BCFF;--md-primary-container:#4F378B;--md-on-primary:#371E73;--md-on-primary-container:#EADDFF;--md-secondary:#CCC2DC;--md-secondary-container:#4A4458;--md-on-secondary:#332D41;--md-on-secondary-container:#E8DEF8;--md-tertiary:#EFB8C8;--md-tertiary-container:#633B48;--md-on-tertiary:#492532;--md-on-tertiary-container:#FFD8E4;--md-surface:#141218;--md-surface-dim:#141218;--md-surface-bright:#3B383E;--md-surface-container-lowest:#0F0D13;--md-surface-container-low:#1D1B20;--md-surface-container:#211F26;--md-surface-container-high:#2B2930;--md-surface-container-highest:#36343B;--md-on-surface:#E6E0E9;--md-on-surface-variant:#CAC4D0;--md-outline:#938F99;--md-outline-variant:#49454F;--md-error:#F2B8B5;--md-error-container:#8C1D18;--md-on-error:#601410;--md-on-error-container:#F9DEDC;--md-shadow:#000000}}.kahoot-answer-indicator{position:absolute;top:12px;right:18px;min-width:24px;height:24px;background:linear-gradient(135deg, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0.7) 100%);color:#fff;padding:0 8px;border-radius:12px;font-size:15px;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.18);display:flex;align-items:center;justify-content:center;border:2px solid #fff2;z-index:1000;pointer-events:none;user-select:none;transition:transform 0.15s}.kahoot-answer-button{position:relative}
 .uets-powerup-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10005;display:flex;align-items:center;justify-content:center;padding:16px;font-family:'Roboto',sans-serif}
 .uets-powerup-modal{background:var(--md-surface-container-high);color:var(--md-on-surface);border-radius:20px;max-width:720px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 10px 25px rgba(0,0,0,0.35);overflow:hidden}
 .uets-powerup-header{display:flex;justify-content:space-between;align-items:center;padding:20px 24px 8px}
@@ -331,7 +351,63 @@
 .uets-powerup-actions{display:flex;gap:8px;flex-wrap:wrap}
   `)
 
-  GM_addStyle(`
+  injectStyle(`
+    .uets-ddg-link,
+    .uets-gemini-button,
+    .uets-copy-prompt-button,
+    .uets-get-answer-button {
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+    .uets-ddg-link:focus-visible,
+    .uets-gemini-button:focus-visible,
+    .uets-copy-prompt-button:focus-visible,
+    .uets-get-answer-button:focus-visible {
+      outline: 2px solid var(--md-primary);
+      outline-offset: 2px;
+    }
+    .uets-response-popup-copy,
+    .uets-response-popup-fill {
+      background: none;
+      border: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 12px;
+      cursor: pointer;
+      color: var(--md-on-surface-variant);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Material Icons Outlined';
+      font-size: 18px;
+      padding: 0;
+      flex-shrink: 0;
+    }
+    .uets-response-popup-copy::before {
+      content: 'content_copy';
+    }
+    .uets-response-popup-fill::before {
+      content: 'edit';
+    }
+    .uets-response-popup-copy:hover,
+    .uets-response-popup-fill:hover {
+      background: rgba(103, 80, 164, 0.08);
+      color: var(--md-primary);
+    }
+    .uets-response-popup-copy.uets-copied,
+    .uets-response-popup-fill.uets-copied {
+      color: #4caf50;
+    }
+    .uets-response-popup-copy.uets-copied::before,
+    .uets-response-popup-fill.uets-copied::before {
+      content: 'check';
+    }
+    .uets-fill-note {
+      margin-top: 6px;
+      color: var(--md-error);
+      font-size: 12px;
+    }
+
     .uets-config-gui {
       display: flex;
       flex-direction: column;
@@ -459,6 +535,7 @@
 
     const popup = document.createElement("div");
     popup.classList.add("uets-welcome-popup");
+    hideFromReplay(popup);
     popup.id = "uets-welcome-popup";
 
     const header = document.createElement("div");
@@ -478,7 +555,9 @@
 
     const content = document.createElement("div");
     content.classList.add("uets-response-popup-content");
-    content.innerHTML = `<p>- Press the floating button (bottom-left) to activate/deactivate visual changes on the page.\n- Press the button 4 times rapidly to open the settings menu.\n- In the settings, click on the info button on the left side of each option to get some insight into the setting.</p>`;
+    const instructions = document.createElement("p");
+    instructions.textContent = "- Press the floating button (bottom-left) to activate/deactivate visual changes on the page.\n- Double-click the button to open the settings menu.\n- In the settings, click on the info button on the left side of each option to get some insight into the setting.";
+    content.appendChild(instructions);
     popup.appendChild(content);
 
     document.body.appendChild(popup);
@@ -501,6 +580,79 @@
     onclick: onClick || null
   });
 
+  // === ANSWER BOX INSERTION ===
+  // The answer box is the biggest visible editor on screen. Chat inputs and our own UI are
+  // excluded so an answer can never end up in the class chat.
+  const findAnswerEditor = () => {
+    const candidates = document.querySelectorAll(
+      '[contenteditable]:not([contenteditable="false"]), textarea, input[type="text"], input[type="search"], input:not([type])',
+    );
+    const usable = [];
+
+    candidates.forEach((element) => {
+      if (element.closest(".uets-config-gui, .uets-powerup-overlay, .uets-response-popup, .uets-welcome-popup, #uets-toggle-ui-button")) return;
+      if (element.closest('[class*="chat" i], [data-testid*="chat" i]')) return;
+      // Never type an answer into a chat/message/name/search field.
+      const hint = `${element.getAttribute("placeholder") || ""} ${element.getAttribute("aria-label") || ""} ${element.className || ""}`.toLowerCase();
+      if (/(chat|message|nickname|username|search|comment)/.test(hint)) return;
+      const rect = element.getBoundingClientRect();
+      if (rect.width < 80 || rect.height < 24) return;
+      usable.push({ element, area: rect.width * rect.height });
+    });
+
+    usable.sort((a, b) => b.area - a.area);
+    return usable[0]?.element || null;
+  };
+
+  const fillAnswerEditor = (text) => {
+    const value = String(text ?? "").trim();
+    if (!value) return false;
+
+    const editor = findAnswerEditor();
+    if (!editor) return false;
+
+    // input/textarea need the native value setter, everything else is a rich-text host.
+    const isValueField = editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement;
+    const current = String(
+      isValueField ? editor.value || "" : editor.innerText ?? editor.textContent ?? "",
+    ).trim();
+    // Never silently discard something the user already wrote.
+    if (current && current !== value && !confirm("Replace the current answer with the new one?")) {
+      return null;
+    }
+
+    editor.focus();
+    if (!isValueField) {
+      let inserted = false;
+      try {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        inserted = document.execCommand("insertText", false, value);
+      } catch (error) {
+        GM_log("[!] execCommand insertText failed:", error);
+      }
+      if (!inserted) editor.textContent = value;
+      const inputEvent = typeof InputEvent === "function"
+        ? new InputEvent("input", { bubbles: true, composed: true })
+        : new Event("input", { bubbles: true });
+      editor.dispatchEvent(inputEvent);
+      editor.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    }
+
+    // React/Vue only pick up changes made through the native value setter.
+    const prototype = editor instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+    if (setter) setter.call(editor, value);
+    else editor.value = value;
+    editor.dispatchEvent(new Event("input", { bubbles: true }));
+    editor.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  };
+
   const addQuestionButtons = (
     container,
     questionText,
@@ -512,6 +664,7 @@
   ) => {
     const buttonsContainer = document.createElement("div");
     buttonsContainer.classList.add("uets-main-question-buttons-container");
+    hideFromReplay(buttonsContainer);
     sharedState.elementsToCleanup.push(buttonsContainer);
 
     const ddgLink = createLink(
@@ -554,37 +707,7 @@
       async (event) => {
         event.preventDefault(); // Prevent form submission
         event.stopPropagation(); // Stop event bubbling
-        const provider = sharedState.config.aiProvider || "deepseek";
-        let imageData = null;
-        const supportsImages = provider !== "deepseek" && !(
-          provider === "opencode-go" &&
-          OPENCODE_GO_TEXT_ONLY_MODELS.has(sharedState.config.opencodeGoModel)
-        );
-        if (supportsImages && imageUrl && sharedState.config.includeImages) {
-          try {
-            imageData = await fetchImageAsBase64(imageUrl);
-          } catch (error) {
-            showResponsePopup(
-              `Failed to fetch image: ${error}\nProceeding with text only.`,
-            );
-          }
-        }
-
-        const requestArgs = [
-          questionText || (imageData ? "(See attached image)" : "(No question text was extracted)"),
-          options,
-          imageData,
-          platform,
-        ];
-        if (provider === "openrouter") {
-          askOpenRouter(...requestArgs);
-        } else if (provider === "opencode-go") {
-          askOpenCodeGo(...requestArgs);
-        } else if (provider === "deepseek") {
-          askDeepSeek(...requestArgs);
-        } else {
-          askGemini(...requestArgs);
-        }
+        await askAIForQuestion(questionText, options, imageUrl, platform);
       },
     );
     geminiButton.type = "button"; // Explicitly set button type
@@ -607,7 +730,7 @@
                 ? questionData.structure.options.map((opt) => opt.id)
                 : [],
             );
-            if (response && response.hasAnswer) {
+            if (response && response.hasAnswer && hasUsableAnswer(response.correctAnswers)) {
               GM_log("[*] Received answer from server:", response);
               highlightCorrectAnswers(
                 response.correctAnswers,
@@ -628,11 +751,60 @@
     container.appendChild(buttonsContainer);
   };
 
+  // Reading-speed derived estimate of how long a human needs for this question, used to
+  // decide where inside the allowed window the answer time should land.
+  // Estimates below/above this window count as the easiest/hardest a question gets.
+  const TIMING_WINDOW = { easy: 1500, hard: 5500 };
+
+  // Uniform randomness looks synthetic in aggregate. Humans read the question, scan the
+  // options, then answer after a short reaction time - with an occasional hesitation.
+  const estimateHumanTimeTaken = (body) => {
+    const questionId = body?.response?.questionId;
+    const question = sharedState.quizData[questionId] || sharedState.questionsPool[questionId];
+    if (!question) return null;
+
+    const countWords = (value) =>
+      String(value ?? "").replace(/<[^>]*>/g, " ").split(/\s+/).filter(Boolean).length;
+
+    const questionWords = countWords(question.structure?.query?.text);
+    const optionWords = (question.structure?.options || []).reduce(
+      (total, option) => total + countWords(option.text), 0,
+    );
+    const questionType = body?.response?.questionType || question?.type;
+    const isOpen = questionType === "OPEN" || questionType === "BLANK";
+
+    const reading = 700 + questionWords * 200 + optionWords * 110;
+    // Averaging two random draws yields a triangular spread instead of a flat one.
+    const reaction = 400 + ((Math.random() + Math.random()) / 2) * 2200;
+    const hesitation = Math.random() < 0.12 ? 800 + Math.random() * 2200 : 0;
+    const typing = isOpen ? 1500 + Math.random() * 2000 : 0;
+
+    return Math.round(reading + reaction + hesitation + typing);
+  };
+
   const processProceedGameRequest = (data) => {
     if (data.response && data.response.timeTaken !== undefined && sharedState.config.enableTimeTakenEdit) {
       const oldtimetaken = data.response.timeTaken;
-      const timetakenforce =
-        Math.floor(Math.random() * (sharedState.config.timeTakenMax - sharedState.config.timeTakenMin + 1)) + sharedState.config.timeTakenMin;
+      const min = sharedState.config.timeTakenMin;
+      const max = sharedState.config.timeTakenMax;
+      const spread = Math.max(0, max - min);
+      const estimate = estimateHumanTimeTaken(data);
+
+      let timetakenforce;
+      if (estimate === null) {
+        // No question data to reason about: spread evenly over the whole window.
+        timetakenforce = Math.round(min + Math.random() * spread);
+      } else {
+        const complexity = Math.min(1, Math.max(0,
+          (estimate - TIMING_WINDOW.easy) / (TIMING_WINDOW.hard - TIMING_WINDOW.easy)));
+        // Triangular draw (mean 0.5, no flat edges) plus an occasional hesitation, biased
+        // towards the complexity of the question: easy ones early, long ones late in the
+        // configured window, so the spoofed times are neither constant nor uniform.
+        const draw = (Math.random() + Math.random()) / 2;
+        const hesitation = Math.random() < 0.12 ? 0.08 : 0;
+        const position = Math.min(0.98, 0.1 + complexity * 0.45 + draw * 0.4 + hesitation);
+        timetakenforce = Math.round(min + spread * position);
+      }
       data.response.timeTaken = timetakenforce;
 
       if (sharedState.config.enableTimerHijack) {
@@ -641,7 +813,8 @@
         data.response.provisional.scores.correct = sharedState.config.timerBonusPoints + data.response.provisional.scoreBreakups.correct.base + data.response.provisional.scoreBreakups.correct.streak;
       }
       GM_log(
-        `[+] timeTaken modified from ${oldtimetaken} to ${timetakenforce}`,
+        `[+] timeTaken modified from ${oldtimetaken} to ${timetakenforce}` +
+        (estimate === null ? " (no question data, randomized in range)" : ` (reading estimate ${estimate}ms within ${min}-${max})`),
       );
     }
     return data;
@@ -693,6 +866,7 @@
 
       const overlay = document.createElement("div");
       overlay.className = "uets-powerup-overlay";
+      hideFromReplay(overlay);
 
       const modal = document.createElement("div");
       modal.className = "uets-powerup-modal";
@@ -913,7 +1087,11 @@
     }
     const questionId = responseData.questionId;
     const questionType = questionData.type;
-    let correctAnswer = questionData.structure?.answer;
+    const correctAnswer = questionData.structure?.answer;
+    if (!hasUsableAnswer(correctAnswer)) {
+      GM_log(`[*] No answer in proceed response for ${questionId}, nothing to share`);
+      return;
+    }
     GM_log(`[*] Sending correct answer (${questionId} <${correctAnswer}>) to server`);
     sendAnswerToServer(questionId, correctAnswer, questionType);
   };
@@ -1015,6 +1193,15 @@
       body: { questionId, correctAnswers, answerType, questionType: answerType },
     });
 
+  // Wayground returns structure.answer as an empty array for quizzes graded server-side.
+  // Sending that would permanently store "[]" as the answer (the server keeps the first
+  // submission), so empty values mean "unknown" everywhere.
+  const hasUsableAnswer = (correctAnswers) =>
+    correctAnswers !== null &&
+    correctAnswers !== undefined &&
+    correctAnswers !== "" &&
+    !(Array.isArray(correctAnswers) && correctAnswers.length === 0);
+
   // === ANSWER HIGHLIGHTING ===
   const highlightCorrectAnswers = (correctAnswers, questionType, showModal = true, useDataCy = true) => {
     if (!sharedState.uiModificationsEnabled) return;
@@ -1064,6 +1251,7 @@
         if (!button.querySelector(".uets-answer-indicator")) {
           const indicator = document.createElement("div");
           indicator.className = "uets-answer-indicator";
+          hideFromReplay(indicator);
           indicator.textContent = "";
           button.appendChild(indicator);
         }
@@ -1081,8 +1269,11 @@
 
     let content = "";
 
+    let fillText = null;
+
     if (questionType === "BLANK") {
       content = `${correctAnswers}`;
+      fillText = content;
     } else if (questionType === "MCQ") {
       const correctIndex = correctAnswers;
 
@@ -1132,7 +1323,7 @@
       }
     }
 
-    showResponsePopup(content, false, "Correct Answers");
+    showResponsePopup(content, false, "Correct Answers", { fillText });
   };
 
   // === CONFIG MANAGEMENT ===
@@ -1155,385 +1346,399 @@
 
     const gui = document.createElement('div');
     gui.className = 'uets-config-gui';
+    hideFromReplay(gui);
 
-    gui.innerHTML = `
-  <div class="uets-config-header">
-    <span class="uets-config-title">UETS Configuration</span>
-    <button class="uets-config-close"></button>
-  </div>
+    // Build our static controls without HTML sinks, even when the host forbids Trusted Types policies.
+    const el = (tag, attributes, ...children) => {
+      const node = document.createElement(tag);
+      Object.entries(attributes).forEach(([name, value]) => node.setAttribute(name, value));
+      node.append(...children);
+      return node;
+    };
 
-  <div class="uets-config-content">
-    <div class="uets-profile-selector">
-      <div class="uets-profile-list">
-        <button class="uets-profile-button" data-profile="Custom">Custom</button>
-        <button class="uets-profile-button" data-profile="Stealthy Extended">Stealthy Extended</button>
-        <button class="uets-profile-button" data-profile="Creator's choice">Creator's choice</button>
-        <button class="uets-profile-button" data-profile="LMAO">LMAO</button>
-      </div>
-    </div>
-
-    <div class="uets-card" style="margin-left: 4px; margin-right: 4px;">
-      <div class="uets-config-section">
-        <div class="uets-config-section-title">General Settings</div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Makes the website think that it's in fullscreen mode AND focused. Recommended on Wayground (if the teacher enabled extra protections)." title="Info"></button>
-            <label class="uets-config-label">Fullscreen spoofing</label>
-          </div>
-          <label class="uets-switch">
-            <input type="checkbox" id="enableSpoofFullscreen">
-            <span class="uets-switch-slider"></span>
-          </label>
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Blocks sounds, some images, and backgrounds from loading, making the user experience smoother." title="Info"></button>
-            <label class="uets-config-label">Site optimizations</label>
-          </div>
-          <label class="uets-switch">
-            <input type="checkbox" id="enableSiteOptimizations">
-            <span class="uets-switch-slider"></span>
-          </label>
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="URL of the server for storing and retrieving answers." title="Info"></button>
-            <label class="uets-config-label">Server URL</label>
-          </div>
-          <input type="text" class="uets-config-input" id="serverUrl" style="width: 200px;">
-        </div>
-      </div>
-    </div>
-
-    <div class="uets-card" style="margin-top: 6px; margin-left: 4px; margin-right: 4px;">
-      <div class="uets-config-section">
-        <div class="uets-config-section-title">Wayground Settings</div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Allows you to spoof the time taken to answer a question. You have 20 seconds to get a ~100-400 point bonus per question, this option forces the site to give you bonus points." title="Info"></button>
-            <label class="uets-config-label">Hijack timeTaken</label>
-          </div>
-          <label class="uets-switch">
-            <input type="checkbox" id="enableTimeTakenEdit">
-            <span class="uets-switch-slider"></span>
-          </label>
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Minimum time in milliseconds for randomized time taken. I recommend keeping it between 6000 and 9000. Very low values will alert the teacher." title="Info"></button>
-            <label class="uets-config-label">timeTaken min (ms)</label>
-          </div>
-          <input type="number" class="uets-config-input" id="timeTakenMin" min="100" max="60000">
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Maximum time in milliseconds for randomized time taken. I recommend keeping it between 7000 and 12000. Very low values will alert the teacher." title="Info"></button>
-            <label class="uets-config-label">timeTaken max (ms)</label>
-          </div>
-          <input type="number" class="uets-config-input" id="timeTakenMax" min="100" max="60000">
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Enables timer hijacking, this adds bonus points to your score, I recommend keeping it between 200 and 350 points to seem legitimate." title="Info"></button>
-            <label class="uets-config-label">Hijack timer for points</label>
-          </div>
-          <label class="uets-switch">
-            <input type="checkbox" id="enableTimerHijack">
-            <span class="uets-switch-slider"></span>
-          </label>
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Timer bonus that you'll recieve if you enable timer hijacking. Values above 6000 are problematic and will cause issues. Maximum value that's guaranteed to work is 5000, but I don't recommend setting it to anything above 350." title="Info"></button>
-            <label class="uets-config-label">Timer bonus points</label>
-          </div>
-          <input type="number" class="uets-config-input" id="timerBonusPoints" min="0" max="5000">
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="DANGER: Enabling this and clicking any reaction will trigger a wave of reactions being shown on the teacher's screen, alongside potentially freezing your browser. If you want to use it, try your best not to get caught." title="Info"></button>
-            <label class="uets-config-label">Enable reaction spam</label>
-          </div>
-          <label class="uets-switch">
-            <input type="checkbox" id="enableReactionSpam">
-            <span class="uets-switch-slider"></span>
-          </label>
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="How many reactions should be set per one reaction." title="Info"></button>
-            <label class="uets-config-label">Reaction spam count</label>
-          </div>
-          <input type="number" class="uets-config-input" id="reactionSpamCount" min="0" max="10">
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Delay in milliseconds between each resend." title="Info"></button>
-            <label class="uets-config-label">Reaction spam delay (ms)</label>
-          </div>
-          <input type="number" class="uets-config-input" id="reactionSpamDelay" min="50" max="1000">
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="When you click Shuffle in the powerup lobby, opens a picker so you can choose which powerups to request instead of random ones." title="Info"></button>
-            <label class="uets-config-label">Powerup shuffle picker</label>
-          </div>
-          <label class="uets-switch">
-            <input type="checkbox" id="enablePowerupPicker">
-            <span class="uets-switch-slider"></span>
-          </label>
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Skip the picker and instantly apply your last confirmed powerup selection on every shuffle." title="Info"></button>
-            <label class="uets-config-label">Auto-apply saved powerups</label>
-          </div>
-          <label class="uets-switch">
-            <input type="checkbox" id="powerupPickerAutoApply">
-            <span class="uets-switch-slider"></span>
-          </label>
-        </div>
-      </div>
-    </div>
-
-    <div class="uets-card" style="margin-top: 6px; margin-left: 4px; margin-right: 4px;">
-      <div class="uets-config-section">
-        <div class="uets-config-section-title">AI Settings</div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Choose the service used for AI answers." title="Info"></button>
-            <label class="uets-config-label">AI Provider</label>
-          </div>
-          <select class="uets-config-input" id="aiProvider" style="width: 200px;">
-            <option value="gemini">Gemini</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="opencode-go">OpenCode Go</option>
-            <option value="deepseek">DeepSeek V4 Flash</option>
-          </select>
-        </div>
-        <div class="uets-config-item">
-          <div class="uets-config-label-container">
-            <button class="uets-config-info" data-info="Whether to include question images when the selected model supports them. Hosted and OpenCode Go DeepSeek V4 models are text-only." title="Info"></button>
-            <label class="uets-config-label">Include images</label>
-          </div>
-          <label class="uets-switch">
-            <input type="checkbox" id="includeImages">
-            <span class="uets-switch-slider"></span>
-          </label>
-        </div>
-        <div class="uets-config-subsection" id="geminiSettings">
-          <div class="uets-config-section-title" style="font-size: 14px; margin-top: 8px;">Gemini Settings</div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Your Gemini API key for AI assistance. You can get it on https://aistudio.google.com/apikey." title="Info"></button>
-              <label class="uets-config-label">API Key</label>
-            </div>
-            <input type="password" class="uets-config-input" id="geminiApiKey" style="width: 200px;">
-          </div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="The Gemini model to use." title="Info"></button>
-              <label class="uets-config-label">Model</label>
-            </div>
-            <select class="uets-config-select" id="geminiModel" style="width: 200px;">
-              <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
-              <option value="gemini-3.6-flash">gemini-3.6-flash</option>
-              <option value="gemini-3.5-flash">gemini-3.5-flash</option>
-              <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
-            </select>
-          </div>
-          <div class="uets-config-item" style="align-items: flex-start;">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Current base input and output prices per 1M tokens. Higher-context rates are shown when applicable." title="Info"></button>
-              <label class="uets-config-label">Price / 1M tokens</label>
-            </div>
-            <div id="geminiModelPrice" style="width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;"></div>
-          </div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Budget for thinking in the AI model (min 512 tokens). Can increase output response quality, but increases the waiting time for the answer. I recommend 512 or 1024 tokens." title="Info"></button>
-              <label class="uets-config-label">Thinking budget</label>
-            </div>
-            <input type="number" class="uets-config-input" id="geminiThinkingBudget" min="512" max="8192">
-          </div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Maximum number of tokens in AI responses (1-8192). A token is roughly equal to a word, or a punctuation mark." title="Info"></button>
-              <label class="uets-config-label">Max output tokens</label>
-            </div>
-            <input type="number" class="uets-config-input" id="maxOutputTokens" min="1" max="8192">
-          </div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Controls randomness (or creativity) in AI responses (0-2). Lower values will be coherant and predictable, while larger values will be more creating. A value between 0.2 and 0.5 is recommended." title="Info"></button>
-              <label class="uets-config-label">Temperature</label>
-            </div>
-            <input type="number" class="uets-config-input" id="temperature" min="0" max="2" step="0.1">
-          </div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Computes the cumulative probability distribution, and cut off as soon as that distribution exceeds the value of topP. Basically how many words can be computed and considered. I recommend a value between 0.90 and 1.00 for a better quality output." title="Info"></button>
-              <label class="uets-config-label">Top P</label>
-            </div>
-            <input type="number" class="uets-config-input" id="topP" min="0" max="1" step="0.05">
-          </div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Helps balance creativity and coherence in generated text by introducing controlled randomness while avoiding less likely or nonsensical words. Basically avoids obscure words, I recommend a value between 40 and 64." title="Info"></button>
-              <label class="uets-config-label">Top K</label>
-            </div>
-            <input type="number" class="uets-config-input" id="topK" min="1" max="100">
-          </div>
-        </div>
-        <div class="uets-config-subsection" id="openrouterSettings" style="display: none;">
-          <div class="uets-config-section-title" style="font-size: 14px; margin-top: 8px;">OpenRouter Settings</div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Your OpenRouter API key for AI assistance. You can get it on https://openrouter.ai/keys." title="Info"></button>
-              <label class="uets-config-label">API Key</label>
-            </div>
-            <input type="password" class="uets-config-input" id="openrouterApiKey" style="width: 200px;">
-          </div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="The OpenRouter model to use. Different models have different capabilities and costs." title="Info"></button>
-              <label class="uets-config-label">Model</label>
-            </div>
-            <select class="uets-config-select" id="openrouterModel" style="width: 200px;">
-              <option value="openai/gpt-5.6-luna">openai/gpt-5.6-luna</option>
-              <option value="google/gemini-3.5-flash-lite">google/gemini-3.5-flash-lite</option>
-              <option value="x-ai/grok-4.5">x-ai/grok-4.5</option>
-              <option value="google/gemini-3.6-flash">google/gemini-3.6-flash</option>
-              <option value="qwen/qwen3.7-flash">qwen/qwen3.7-flash</option>
-              <option value="moonshotai/kimi-k3">moonshotai/kimi-k3</option>
-            </select>
-          </div>
-          <div class="uets-config-item" style="align-items: flex-start;">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Current base input and output prices per 1M tokens. Higher-context rates are shown when applicable." title="Info"></button>
-              <label class="uets-config-label">Price / 1M tokens</label>
-            </div>
-            <div id="openrouterModelPrice" style="width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;"></div>
-          </div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Maximum number of tokens in AI responses (256-8192). A token is roughly equal to a word." title="Info"></button>
-              <label class="uets-config-label">Max output tokens</label>
-            </div>
-            <input type="number" class="uets-config-input" id="openrouterMaxTokens" min="256" max="8192">
-          </div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Controls randomness (0-2). Lower values are more focused and deterministic. Recommended: 0.2-0.5." title="Info"></button>
-              <label class="uets-config-label">Temperature</label>
-            </div>
-            <input type="number" class="uets-config-input" id="openrouterTemperature" min="0" max="2" step="0.1">
-          </div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Nucleus sampling parameter (0-1). Controls diversity of output. Recommended: 0.90-1.00." title="Info"></button>
-              <label class="uets-config-label">Top P</label>
-            </div>
-            <input type="number" class="uets-config-input" id="openrouterTopP" min="0" max="1" step="0.05">
-          </div>
-          <div class="uets-config-item" id="openrouterReasoningTokensItem">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Max reasoning tokens (256-8192) for models that support extended reasoning. Used by most models." title="Info"></button>
-              <label class="uets-config-label">Reasoning max tokens</label>
-            </div>
-            <input type="number" class="uets-config-input" id="openrouterReasoningMaxTokens" min="256" max="8192">
-          </div>
-          <div class="uets-config-item" id="openrouterReasoningEffortItem" style="display: none;">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Reasoning effort level for models that support it. Higher effort improves quality but takes longer." title="Info"></button>
-              <label class="uets-config-label">Reasoning effort</label>
-            </div>
-            <select class="uets-config-select" id="openrouterReasoningEffort" style="width: 200px;">
-              <option value="none">None</option>
-              <option value="minimal">Minimal</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="xhigh">Extra High</option>
-            </select>
-          </div>
-        </div>
-        <div class="uets-config-subsection" id="opencodeGoSettings" style="display: none;">
-          <div class="uets-config-section-title" style="font-size: 14px; margin-top: 8px;">OpenCode Go Settings</div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Your OpenCode Go API key from https://opencode.ai/auth." title="Info"></button>
-              <label class="uets-config-label">API Key</label>
-            </div>
-            <input type="password" class="uets-config-input" id="opencodeGoApiKey" style="width: 200px;">
-          </div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="The model to use through your OpenCode Go subscription." title="Info"></button>
-              <label class="uets-config-label">Model</label>
-            </div>
-            <select class="uets-config-select" id="opencodeGoModel" style="width: 200px;">
-              <option value="gpt-5.6-luna">GPT 5.6 Luna</option>
-              <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
-              <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>
-              <option value="qwen3.7-max">Qwen3.7 Max</option>
-              <option value="qwen3.7-plus">Qwen3.7 Plus</option>
-              <option value="mimo-v2.5-pro">MiMo-V2.5-Pro</option>
-              <option value="kimi-k3">Kimi K3</option>
-              <option value="glm-5.2">GLM-5.2</option>
-            </select>
-          </div>
-          <div class="uets-config-item" style="align-items: flex-start;">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Official OpenCode Go input and output prices per 1M tokens. These prices determine usage against subscription limits." title="Info"></button>
-              <label class="uets-config-label">Price / 1M tokens</label>
-            </div>
-            <div id="opencodeGoModelPrice" style="width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;"></div>
-          </div>
-          <div id="opencodeGoImageNotice" style="display: none; padding: 8px 0; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4;">This DeepSeek model is text-only. Question images are omitted.</div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Maximum number of tokens in OpenCode Go responses (256-8192)." title="Info"></button>
-              <label class="uets-config-label">Max output tokens</label>
-            </div>
-            <input type="number" class="uets-config-input" id="opencodeGoMaxTokens" min="256" max="8192">
-          </div>
-        </div>
-        <div class="uets-config-subsection" id="deepseekSettings" style="display: none;">
-          <div class="uets-config-section-title" style="font-size: 14px; margin-top: 8px;">DeepSeek Settings</div>
-          <div style="padding: 8px 0; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4;">This hosted model is text-only. Question images are omitted.</div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="This endpoint serves only DeepSeek V4 Flash and does not require your own API key." title="Info"></button>
-              <label class="uets-config-label">Model</label>
-            </div>
-            <input type="text" class="uets-config-input" value="DeepSeek V4 Flash 0731" style="width: 200px;" readonly>
-          </div>
-          <div class="uets-config-item" style="align-items: flex-start;">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="The supplied hosted endpoint does not require an account or bill token usage." title="Info"></button>
-              <label class="uets-config-label">Price / 1M tokens</label>
-            </div>
-            <div id="deepseekModelPrice" style="width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;"></div>
-          </div>
-          <div class="uets-config-item">
-            <div class="uets-config-label-container">
-              <button class="uets-config-info" data-info="Maximum number of tokens in DeepSeek responses (256-8192)." title="Info"></button>
-              <label class="uets-config-label">Max output tokens</label>
-            </div>
-            <input type="number" class="uets-config-input" id="deepseekMaxTokens" min="256" max="8192">
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="uets-config-buttons">
-    <button class="uets-config-button uets-config-save">Save</button>
-    <button class="uets-config-button uets-config-reset">Reset to Defaults</button>
-    <button class="uets-config-button uets-config-cancel">Cancel</button>
-  </div>
-`;
+    gui.append(
+      el('div', { class: 'uets-config-header' },
+        el('span', { class: 'uets-config-title' }, 'UETS Configuration'),
+        el('button', { class: 'uets-config-close' }),
+      ),
+      el('div', { class: 'uets-config-content' },
+        el('div', { class: 'uets-profile-selector' },
+          el('div', { class: 'uets-profile-list' },
+            el('button', { class: 'uets-profile-button', 'data-profile': 'Custom' }, 'Custom'),
+            el('button', { class: 'uets-profile-button', 'data-profile': 'Stealthy Extended' }, 'Stealthy Extended'),
+            el('button', { class: 'uets-profile-button', 'data-profile': "Creator's choice" }, "Creator's choice"),
+            el('button', { class: 'uets-profile-button', 'data-profile': 'LMAO' }, 'LMAO'),
+          ),
+        ),
+        el('div', { class: 'uets-card', style: 'margin-left: 4px; margin-right: 4px;' },
+          el('div', { class: 'uets-config-section' },
+            el('div', { class: 'uets-config-section-title' }, 'General Settings'),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': "Makes the website think that it's in fullscreen mode AND focused. Recommended on Wayground (if the teacher enabled extra protections).", title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'Fullscreen spoofing'),
+              ),
+              el('label', { class: 'uets-switch' },
+                el('input', { type: 'checkbox', id: 'enableSpoofFullscreen' }),
+                el('span', { class: 'uets-switch-slider' }),
+              ),
+            ),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': 'Blocks sounds, some images, and backgrounds from loading, making the user experience smoother.', title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'Site optimizations'),
+              ),
+              el('label', { class: 'uets-switch' },
+                el('input', { type: 'checkbox', id: 'enableSiteOptimizations' }),
+                el('span', { class: 'uets-switch-slider' }),
+              ),
+            ),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': 'URL of the server for storing and retrieving answers.', title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'Server URL'),
+              ),
+              el('input', { type: 'text', class: 'uets-config-input', id: 'serverUrl', style: 'width: 200px;' }),
+            ),
+          ),
+        ),
+        el('div', { class: 'uets-card', style: 'margin-top: 6px; margin-left: 4px; margin-right: 4px;' },
+          el('div', { class: 'uets-config-section' },
+            el('div', { class: 'uets-config-section-title' }, 'Wayground Settings'),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': 'Allows you to spoof the time taken to answer a question. You have 20 seconds to get a ~100-400 point bonus per question, this option forces the site to give you bonus points.', title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'Hijack timeTaken'),
+              ),
+              el('label', { class: 'uets-switch' },
+                el('input', { type: 'checkbox', id: 'enableTimeTakenEdit' }),
+                el('span', { class: 'uets-switch-slider' }),
+              ),
+            ),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': 'Minimum time in milliseconds for randomized time taken. I recommend keeping it between 6000 and 9000. Very low values will alert the teacher.', title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'timeTaken min (ms)'),
+              ),
+              el('input', { type: 'number', class: 'uets-config-input', id: 'timeTakenMin', min: '100', max: '60000' }),
+            ),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': 'Maximum time in milliseconds for randomized time taken. I recommend keeping it between 7000 and 12000. Very low values will alert the teacher.', title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'timeTaken max (ms)'),
+              ),
+              el('input', { type: 'number', class: 'uets-config-input', id: 'timeTakenMax', min: '100', max: '60000' }),
+            ),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': 'Enables timer hijacking, this adds bonus points to your score, I recommend keeping it between 200 and 350 points to seem legitimate.', title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'Hijack timer for points'),
+              ),
+              el('label', { class: 'uets-switch' },
+                el('input', { type: 'checkbox', id: 'enableTimerHijack' }),
+                el('span', { class: 'uets-switch-slider' }),
+              ),
+            ),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': "Timer bonus that you'll recieve if you enable timer hijacking. Values above 6000 are problematic and will cause issues. Maximum value that's guaranteed to work is 5000, but I don't recommend setting it to anything above 350.", title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'Timer bonus points'),
+              ),
+              el('input', { type: 'number', class: 'uets-config-input', id: 'timerBonusPoints', min: '0', max: '5000' }),
+            ),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': "DANGER: Enabling this and clicking any reaction will trigger a wave of reactions being shown on the teacher's screen, alongside potentially freezing your browser. If you want to use it, try your best not to get caught.", title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'Enable reaction spam'),
+              ),
+              el('label', { class: 'uets-switch' },
+                el('input', { type: 'checkbox', id: 'enableReactionSpam' }),
+                el('span', { class: 'uets-switch-slider' }),
+              ),
+            ),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': 'How many reactions should be set per one reaction.', title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'Reaction spam count'),
+              ),
+              el('input', { type: 'number', class: 'uets-config-input', id: 'reactionSpamCount', min: '0', max: '10' }),
+            ),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': 'Delay in milliseconds between each resend.', title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'Reaction spam delay (ms)'),
+              ),
+              el('input', { type: 'number', class: 'uets-config-input', id: 'reactionSpamDelay', min: '50', max: '1000' }),
+            ),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': 'When you click Shuffle in the powerup lobby, opens a picker so you can choose which powerups to request instead of random ones.', title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'Powerup shuffle picker'),
+              ),
+              el('label', { class: 'uets-switch' },
+                el('input', { type: 'checkbox', id: 'enablePowerupPicker' }),
+                el('span', { class: 'uets-switch-slider' }),
+              ),
+            ),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': 'Skip the picker and instantly apply your last confirmed powerup selection on every shuffle.', title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'Auto-apply saved powerups'),
+              ),
+              el('label', { class: 'uets-switch' },
+                el('input', { type: 'checkbox', id: 'powerupPickerAutoApply' }),
+                el('span', { class: 'uets-switch-slider' }),
+              ),
+            ),
+          ),
+        ),
+        el('div', { class: 'uets-card', style: 'margin-top: 6px; margin-left: 4px; margin-right: 4px;' },
+          el('div', { class: 'uets-config-section' },
+            el('div', { class: 'uets-config-section-title' }, 'AI Settings'),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': 'Choose the service used for AI answers.', title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'AI Provider'),
+              ),
+              el('select', { class: 'uets-config-input', id: 'aiProvider', style: 'width: 200px;' },
+                el('option', { value: 'gemini' }, 'Gemini'),
+                el('option', { value: 'openrouter' }, 'OpenRouter'),
+                el('option', { value: 'opencode-go' }, 'OpenCode Go'),
+                el('option', { value: 'deepseek' }, 'DeepSeek V4 Flash'),
+              ),
+            ),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': 'Whether to include question images when the selected model supports them. Hosted and OpenCode Go DeepSeek V4 models are text-only.', title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'Include images'),
+              ),
+              el('label', { class: 'uets-switch' },
+                el('input', { type: 'checkbox', id: 'includeImages' }),
+                el('span', { class: 'uets-switch-slider' }),
+              ),
+            ),
+            el('div', { class: 'uets-config-item' },
+              el('div', { class: 'uets-config-label-container' },
+                el('button', { class: 'uets-config-info', 'data-info': 'When neither the local quiz data nor the crowdsourced server knows the answer, start one AI provider chain as soon as the question appears.', title: 'Info' }),
+                el('label', { class: 'uets-config-label' }, 'Auto-ask AI when unknown'),
+              ),
+              el('label', { class: 'uets-switch' },
+                el('input', { type: 'checkbox', id: 'autoAIWhenUnknown' }),
+                el('span', { class: 'uets-switch-slider' }),
+              ),
+            ),
+            el('div', { class: 'uets-config-subsection', id: 'geminiSettings' },
+              el('div', { class: 'uets-config-section-title', style: 'font-size: 14px; margin-top: 8px;' }, 'Gemini Settings'),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Your Gemini API key for AI assistance. You can get it on https://aistudio.google.com/apikey.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'API Key'),
+                ),
+                el('input', { type: 'password', class: 'uets-config-input', id: 'geminiApiKey', style: 'width: 200px;' }),
+              ),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'The Gemini model to use.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Model'),
+                ),
+                el('select', { class: 'uets-config-select', id: 'geminiModel', style: 'width: 200px;' },
+                  el('option', { value: 'gemini-3.5-flash-lite' }, 'gemini-3.5-flash-lite'),
+                  el('option', { value: 'gemini-3.6-flash' }, 'gemini-3.6-flash'),
+                  el('option', { value: 'gemini-3.5-flash' }, 'gemini-3.5-flash'),
+                  el('option', { value: 'gemini-3.1-pro-preview' }, 'gemini-3.1-pro-preview'),
+                ),
+              ),
+              el('div', { class: 'uets-config-item', style: 'align-items: flex-start;' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Current base input and output prices per 1M tokens. Higher-context rates are shown when applicable.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Price / 1M tokens'),
+                ),
+                el('div', { id: 'geminiModelPrice', style: 'width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;' }),
+              ),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Budget for thinking in the AI model (min 512 tokens). Can increase output response quality, but increases the waiting time for the answer. I recommend 512 or 1024 tokens.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Thinking budget'),
+                ),
+                el('input', { type: 'number', class: 'uets-config-input', id: 'geminiThinkingBudget', min: '512', max: '8192' }),
+              ),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Maximum number of tokens in AI responses (1-8192). A token is roughly equal to a word, or a punctuation mark.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Max output tokens'),
+                ),
+                el('input', { type: 'number', class: 'uets-config-input', id: 'maxOutputTokens', min: '1', max: '8192' }),
+              ),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Controls randomness (or creativity) in AI responses (0-2). Lower values will be coherant and predictable, while larger values will be more creating. A value between 0.2 and 0.5 is recommended.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Temperature'),
+                ),
+                el('input', { type: 'number', class: 'uets-config-input', id: 'temperature', min: '0', max: '2', step: '0.1' }),
+              ),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Computes the cumulative probability distribution, and cut off as soon as that distribution exceeds the value of topP. Basically how many words can be computed and considered. I recommend a value between 0.90 and 1.00 for a better quality output.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Top P'),
+                ),
+                el('input', { type: 'number', class: 'uets-config-input', id: 'topP', min: '0', max: '1', step: '0.05' }),
+              ),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Helps balance creativity and coherence in generated text by introducing controlled randomness while avoiding less likely or nonsensical words. Basically avoids obscure words, I recommend a value between 40 and 64.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Top K'),
+                ),
+                el('input', { type: 'number', class: 'uets-config-input', id: 'topK', min: '1', max: '100' }),
+              ),
+            ),
+            el('div', { class: 'uets-config-subsection', id: 'openrouterSettings', style: 'display: none;' },
+              el('div', { class: 'uets-config-section-title', style: 'font-size: 14px; margin-top: 8px;' }, 'OpenRouter Settings'),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Your OpenRouter API key for AI assistance. You can get it on https://openrouter.ai/keys.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'API Key'),
+                ),
+                el('input', { type: 'password', class: 'uets-config-input', id: 'openrouterApiKey', style: 'width: 200px;' }),
+              ),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'The OpenRouter model to use. Different models have different capabilities and costs.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Model'),
+                ),
+                el('select', { class: 'uets-config-select', id: 'openrouterModel', style: 'width: 200px;' },
+                  el('option', { value: 'openai/gpt-5.6-luna' }, 'openai/gpt-5.6-luna'),
+                  el('option', { value: 'google/gemini-3.5-flash-lite' }, 'google/gemini-3.5-flash-lite'),
+                  el('option', { value: 'x-ai/grok-4.5' }, 'x-ai/grok-4.5'),
+                  el('option', { value: 'google/gemini-3.6-flash' }, 'google/gemini-3.6-flash'),
+                  el('option', { value: 'qwen/qwen3.7-flash' }, 'qwen/qwen3.7-flash'),
+                  el('option', { value: 'moonshotai/kimi-k3' }, 'moonshotai/kimi-k3'),
+                ),
+              ),
+              el('div', { class: 'uets-config-item', style: 'align-items: flex-start;' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Current base input and output prices per 1M tokens. Higher-context rates are shown when applicable.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Price / 1M tokens'),
+                ),
+                el('div', { id: 'openrouterModelPrice', style: 'width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;' }),
+              ),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Maximum number of tokens in AI responses (256-8192). A token is roughly equal to a word.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Max output tokens'),
+                ),
+                el('input', { type: 'number', class: 'uets-config-input', id: 'openrouterMaxTokens', min: '256', max: '8192' }),
+              ),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Controls randomness (0-2). Lower values are more focused and deterministic. Recommended: 0.2-0.5.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Temperature'),
+                ),
+                el('input', { type: 'number', class: 'uets-config-input', id: 'openrouterTemperature', min: '0', max: '2', step: '0.1' }),
+              ),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Nucleus sampling parameter (0-1). Controls diversity of output. Recommended: 0.90-1.00.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Top P'),
+                ),
+                el('input', { type: 'number', class: 'uets-config-input', id: 'openrouterTopP', min: '0', max: '1', step: '0.05' }),
+              ),
+              el('div', { class: 'uets-config-item', id: 'openrouterReasoningTokensItem' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Max reasoning tokens (256-8192) for models that support extended reasoning. Used by most models.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Reasoning max tokens'),
+                ),
+                el('input', { type: 'number', class: 'uets-config-input', id: 'openrouterReasoningMaxTokens', min: '256', max: '8192' }),
+              ),
+              el('div', { class: 'uets-config-item', id: 'openrouterReasoningEffortItem', style: 'display: none;' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Reasoning effort level for models that support it. Higher effort improves quality but takes longer.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Reasoning effort'),
+                ),
+                el('select', { class: 'uets-config-select', id: 'openrouterReasoningEffort', style: 'width: 200px;' },
+                  el('option', { value: 'none' }, 'None'),
+                  el('option', { value: 'minimal' }, 'Minimal'),
+                  el('option', { value: 'low' }, 'Low'),
+                  el('option', { value: 'medium' }, 'Medium'),
+                  el('option', { value: 'high' }, 'High'),
+                  el('option', { value: 'xhigh' }, 'Extra High'),
+                ),
+              ),
+            ),
+            el('div', { class: 'uets-config-subsection', id: 'opencodeGoSettings', style: 'display: none;' },
+              el('div', { class: 'uets-config-section-title', style: 'font-size: 14px; margin-top: 8px;' }, 'OpenCode Go Settings'),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Your OpenCode Go API key from https://opencode.ai/auth.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'API Key'),
+                ),
+                el('input', { type: 'password', class: 'uets-config-input', id: 'opencodeGoApiKey', style: 'width: 200px;' }),
+              ),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'The model to use through your OpenCode Go subscription.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Model'),
+                ),
+                el('select', { class: 'uets-config-select', id: 'opencodeGoModel', style: 'width: 200px;' },
+                  el('option', { value: 'gpt-5.6-luna' }, 'GPT 5.6 Luna'),
+                  el('option', { value: 'deepseek-v4-flash' }, 'DeepSeek V4 Flash'),
+                  el('option', { value: 'deepseek-v4-pro' }, 'DeepSeek V4 Pro'),
+                  el('option', { value: 'qwen3.7-max' }, 'Qwen3.7 Max'),
+                  el('option', { value: 'qwen3.7-plus' }, 'Qwen3.7 Plus'),
+                  el('option', { value: 'mimo-v2.5-pro' }, 'MiMo-V2.5-Pro'),
+                  el('option', { value: 'kimi-k3' }, 'Kimi K3'),
+                  el('option', { value: 'glm-5.2' }, 'GLM-5.2'),
+                ),
+              ),
+              el('div', { class: 'uets-config-item', style: 'align-items: flex-start;' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Official OpenCode Go input and output prices per 1M tokens. These prices determine usage against subscription limits.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Price / 1M tokens'),
+                ),
+                el('div', { id: 'opencodeGoModelPrice', style: 'width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;' }),
+              ),
+              el('div', { id: 'opencodeGoImageNotice', style: 'display: none; padding: 8px 0; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4;' }, 'This DeepSeek model is text-only. Question images are omitted.'),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Maximum number of tokens in OpenCode Go responses (256-8192).', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Max output tokens'),
+                ),
+                el('input', { type: 'number', class: 'uets-config-input', id: 'opencodeGoMaxTokens', min: '256', max: '8192' }),
+              ),
+            ),
+            el('div', { class: 'uets-config-subsection', id: 'deepseekSettings', style: 'display: none;' },
+              el('div', { class: 'uets-config-section-title', style: 'font-size: 14px; margin-top: 8px;' }, 'DeepSeek Settings'),
+              el('div', { style: 'padding: 8px 0; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4;' }, 'This hosted model is text-only. Question images are omitted.'),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'This endpoint serves only DeepSeek V4 Flash and does not require your own API key.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Model'),
+                ),
+                el('input', { type: 'text', class: 'uets-config-input', value: 'DeepSeek V4 Flash 0731', style: 'width: 200px;', readonly: '' }),
+              ),
+              el('div', { class: 'uets-config-item', style: 'align-items: flex-start;' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'The supplied hosted endpoint does not require an account or bill token usage.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Price / 1M tokens'),
+                ),
+                el('div', { id: 'deepseekModelPrice', style: 'width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;' }),
+              ),
+              el('div', { class: 'uets-config-item' },
+                el('div', { class: 'uets-config-label-container' },
+                  el('button', { class: 'uets-config-info', 'data-info': 'Maximum number of tokens in DeepSeek responses (256-8192).', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Max output tokens'),
+                ),
+                el('input', { type: 'number', class: 'uets-config-input', id: 'deepseekMaxTokens', min: '256', max: '8192' }),
+              ),
+            ),
+          ),
+        ),
+      ),
+      el('div', { class: 'uets-config-buttons' },
+        el('button', { class: 'uets-config-button uets-config-save' }, 'Save'),
+        el('button', { class: 'uets-config-button uets-config-reset' }, 'Reset to Defaults'),
+        el('button', { class: 'uets-config-button uets-config-cancel' }, 'Cancel'),
+      ),
+    );
 
     const formatModelPrice = (value) => {
       const decimals = value < 1 && !Number.isInteger(value * 100) ? 3 : 2;
@@ -1607,6 +1812,7 @@
 
       // Shared AI settings
       document.getElementById('includeImages').checked = sharedState.config.includeImages;
+      document.getElementById('autoAIWhenUnknown').checked = sharedState.config.autoAIWhenUnknown === true;
       document.getElementById('maxOutputTokens').value = sharedState.config.maxOutputTokens;
       document.getElementById('temperature').value = sharedState.config.temperature;
       document.getElementById('topP').value = sharedState.config.topP;
@@ -1681,67 +1887,81 @@
       select.addEventListener('change', updateModelPricing);
     });
 
+    // Read numeric fields without ever storing NaN (empty input uses the default)
+    const readNumber = (elementId, fallback, { min = -Infinity, max = Infinity } = {}) => {
+      const raw = document.getElementById(elementId)?.value;
+      const value = Number.parseFloat(raw);
+      const resolved = Number.isFinite(value) ? value : fallback;
+      return Math.min(max, Math.max(min, resolved));
+    };
+    const readInt = (elementId, fallback, range) =>
+      Math.round(readNumber(elementId, fallback, range));
+
     gui.querySelector('.uets-config-save').onclick = () => {
       // Collect values
       sharedState.config.enableTimeTakenEdit = document.getElementById('enableTimeTakenEdit').checked;
-      sharedState.config.timeTakenMin = parseInt(document.getElementById('timeTakenMin').value);
-      sharedState.config.timeTakenMax = parseInt(document.getElementById('timeTakenMax').value);
+      const timeTakenMin = readInt('timeTakenMin', DEFAULT_CONFIG.timeTakenMin, { min: 100, max: 60000 });
+      const timeTakenMax = readInt('timeTakenMax', DEFAULT_CONFIG.timeTakenMax, { min: 100, max: 60000 });
+      sharedState.config.timeTakenMin = Math.min(timeTakenMin, timeTakenMax);
+      sharedState.config.timeTakenMax = Math.max(timeTakenMin, timeTakenMax);
       sharedState.config.enableTimerHijack = document.getElementById('enableTimerHijack').checked;
-      sharedState.config.timerBonusPoints = parseInt(document.getElementById('timerBonusPoints').value);
+      sharedState.config.timerBonusPoints = readInt('timerBonusPoints', DEFAULT_CONFIG.timerBonusPoints, { min: 0, max: 5000 });
       sharedState.config.enableSpoofFullscreen = document.getElementById('enableSpoofFullscreen').checked;
       sharedState.config.enableSiteOptimizations = document.getElementById('enableSiteOptimizations').checked;
-      sharedState.config.serverUrl = document.getElementById('serverUrl').value;
+      sharedState.config.serverUrl = document.getElementById('serverUrl').value.trim();
       sharedState.config.aiProvider = document.getElementById('aiProvider').value;
 
       // Gemini settings
-      sharedState.config.geminiApiKey = document.getElementById('geminiApiKey').value;
+      sharedState.config.geminiApiKey = document.getElementById('geminiApiKey').value.trim();
       sharedState.config.geminiModel = document.getElementById('geminiModel').value;
-      sharedState.config.geminiThinkingBudget = parseInt(document.getElementById('geminiThinkingBudget').value);
+      sharedState.config.geminiThinkingBudget = readInt('geminiThinkingBudget', DEFAULT_CONFIG.geminiThinkingBudget, { min: 512, max: 8192 });
 
       // OpenRouter settings
-      sharedState.config.openrouterApiKey = document.getElementById('openrouterApiKey').value;
+      sharedState.config.openrouterApiKey = document.getElementById('openrouterApiKey').value.trim();
       sharedState.config.openrouterModel = document.getElementById('openrouterModel').value;
-      sharedState.config.openrouterMaxTokens = parseInt(document.getElementById('openrouterMaxTokens').value);
-      sharedState.config.openrouterReasoningMaxTokens = parseInt(document.getElementById('openrouterReasoningMaxTokens').value);
+      sharedState.config.openrouterMaxTokens = readInt('openrouterMaxTokens', DEFAULT_CONFIG.openrouterMaxTokens, { min: 256, max: 8192 });
+      sharedState.config.openrouterReasoningMaxTokens = readInt('openrouterReasoningMaxTokens', DEFAULT_CONFIG.openrouterReasoningMaxTokens, { min: 256, max: 8192 });
       sharedState.config.openrouterReasoningEffort = document.getElementById('openrouterReasoningEffort').value;
 
       // OpenCode Go and hosted DeepSeek settings
-      sharedState.config.opencodeGoApiKey = document.getElementById('opencodeGoApiKey').value;
+      sharedState.config.opencodeGoApiKey = document.getElementById('opencodeGoApiKey').value.trim();
       sharedState.config.opencodeGoModel = document.getElementById('opencodeGoModel').value;
-      sharedState.config.opencodeGoMaxTokens = parseInt(document.getElementById('opencodeGoMaxTokens').value);
-      sharedState.config.deepseekMaxTokens = parseInt(document.getElementById('deepseekMaxTokens').value);
+      sharedState.config.opencodeGoMaxTokens = readInt('opencodeGoMaxTokens', DEFAULT_CONFIG.opencodeGoMaxTokens, { min: 256, max: 8192 });
+      sharedState.config.deepseekMaxTokens = readInt('deepseekMaxTokens', DEFAULT_CONFIG.deepseekMaxTokens, { min: 256, max: 8192 });
 
       // Shared AI settings
       sharedState.config.includeImages = document.getElementById('includeImages').checked;
+      sharedState.config.autoAIWhenUnknown = document.getElementById('autoAIWhenUnknown').checked;
 
       // Use provider-specific values
       const provider = document.getElementById('aiProvider').value;
       if (provider === 'gemini') {
-        sharedState.config.maxOutputTokens = parseInt(document.getElementById('maxOutputTokens').value);
-        sharedState.config.temperature = parseFloat(document.getElementById('temperature').value);
-        sharedState.config.topP = parseFloat(document.getElementById('topP').value);
-        sharedState.config.topK = parseInt(document.getElementById('topK').value);
+        sharedState.config.maxOutputTokens = readInt('maxOutputTokens', DEFAULT_CONFIG.maxOutputTokens, { min: 1, max: 8192 });
+        sharedState.config.temperature = readNumber('temperature', DEFAULT_CONFIG.temperature, { min: 0, max: 2 });
+        sharedState.config.topP = readNumber('topP', DEFAULT_CONFIG.topP, { min: 0, max: 1 });
+        sharedState.config.topK = readInt('topK', DEFAULT_CONFIG.topK, { min: 1, max: 100 });
       } else if (provider === 'openrouter') {
-        sharedState.config.maxOutputTokens = parseInt(document.getElementById('openrouterMaxTokens').value);
-        sharedState.config.temperature = parseFloat(document.getElementById('openrouterTemperature').value);
-        sharedState.config.topP = parseFloat(document.getElementById('openrouterTopP').value);
+        sharedState.config.maxOutputTokens = sharedState.config.openrouterMaxTokens;
+        sharedState.config.temperature = readNumber('openrouterTemperature', DEFAULT_CONFIG.temperature, { min: 0, max: 2 });
+        sharedState.config.topP = readNumber('openrouterTopP', DEFAULT_CONFIG.topP, { min: 0, max: 1 });
       }
 
       sharedState.config.enableReactionSpam = document.getElementById('enableReactionSpam').checked;
-      sharedState.config.reactionSpamCount = parseInt(document.getElementById('reactionSpamCount').value);
-      sharedState.config.reactionSpamDelay = parseInt(document.getElementById('reactionSpamDelay').value);
+      sharedState.config.reactionSpamCount = readInt('reactionSpamCount', DEFAULT_CONFIG.reactionSpamCount, { min: 0, max: 10 });
+      sharedState.config.reactionSpamDelay = readInt('reactionSpamDelay', DEFAULT_CONFIG.reactionSpamDelay, { min: 50, max: 1000 });
       sharedState.config.enablePowerupPicker = document.getElementById('enablePowerupPicker').checked;
       sharedState.config.powerupPickerAutoApply = document.getElementById('powerupPickerAutoApply').checked;
 
       saveConfig();
       closeConfigGui();
-      alert('Configuration saved!');
+      showResponsePopup('Configuration saved!', false, 'UETS');
     };
 
     gui.querySelector('.uets-config-reset').onclick = () => {
       if (confirm('Reset all settings to defaults?')) {
         resetConfig();
         populateValues();
+        showResponsePopup('Settings reset to defaults. Press Save to keep them.', false, 'UETS');
       }
     };
 
@@ -1789,6 +2009,8 @@
   };
 
   // === SHARED API KEY MANAGEMENT ===
+  GM_registerMenuCommand("UETS Settings", () => createConfigGui());
+
   GM_registerMenuCommand("Set Gemini API Key", () => {
     const currentKey = GM_getValue(GEMINI_API_KEY_STORAGE, "");
     const newKey = prompt("Enter your Gemini API Key:", currentKey);
@@ -1800,40 +2022,43 @@
     }
   });
 
-  const getApiKey = async () => {
-    const provider = sharedState.config.aiProvider || 'deepseek';
+  const API_KEY_FIELDS = {
+    gemini: "geminiApiKey",
+    openrouter: "openrouterApiKey",
+    "opencode-go": "opencodeGoApiKey",
+  };
 
-    if (provider === 'gemini') {
-      let apiKey = sharedState.config.geminiApiKey || GM_getValue(GEMINI_API_KEY_STORAGE, null);
-      if (!apiKey || apiKey.trim() === "") {
-        apiKey = prompt("Gemini API Key not set. Please enter your API Key:");
-        if (apiKey && apiKey.trim() !== "") {
-          sharedState.config.geminiApiKey = apiKey.trim();
-          GM_setValue(GEMINI_API_KEY_STORAGE, apiKey.trim());
-          saveConfig();
-          return apiKey.trim();
-        } else {
-          alert("Gemini API Key is required. Set it via the configuration or Tampermonkey menu.");
-          return null;
-        }
-      }
-      return apiKey.trim();
-    } else {
-      // OpenRouter
-      let apiKey = sharedState.config.openrouterApiKey;
-      if (!apiKey || apiKey.trim() === "") {
-        apiKey = prompt("OpenRouter API Key not set. Please enter your API Key:");
-        if (apiKey && apiKey.trim() !== "") {
-          sharedState.config.openrouterApiKey = apiKey.trim();
-          saveConfig();
-          return apiKey.trim();
-        } else {
-          alert("OpenRouter API Key is required. Set it via the configuration.");
-          return null;
-        }
-      }
-      return apiKey.trim();
+  const PROVIDER_LABELS = {
+    gemini: "Gemini",
+    openrouter: "OpenRouter",
+    "opencode-go": "OpenCode Go",
+    deepseek: "DeepSeek",
+  };
+
+  // The key is only asked for interactively when the user picked that provider;
+  // fallback attempts skip providers that have no key stored instead of prompting.
+  const getApiKey = (provider = sharedState.config.aiProvider || "deepseek", { promptIfMissing = true } = {}) => {
+    const field = API_KEY_FIELDS[provider];
+    if (!field) return null;
+
+    let apiKey = String(sharedState.config[field] || "").trim();
+    if (!apiKey && provider === "gemini") {
+      apiKey = String(GM_getValue(GEMINI_API_KEY_STORAGE, "") || "").trim();
     }
+    if (apiKey) return apiKey;
+    if (!promptIfMissing) return null;
+
+    const label = PROVIDER_LABELS[provider];
+    const entered = String(prompt(`${label} API Key not set. Please enter your API Key:`) || "").trim();
+    if (!entered) {
+      alert(`${label} API Key is required. Set it via the configuration or the userscript menu.`);
+      return null;
+    }
+
+    sharedState.config[field] = entered;
+    if (provider === "gemini") GM_setValue(GEMINI_API_KEY_STORAGE, entered);
+    saveConfig();
+    return entered;
   };
 
   // === SHARED IMAGE FETCHING ===
@@ -1844,6 +2069,7 @@
         method: "GET",
         url: imageUrl,
         responseType: "blob",
+        timeout: 20000,
         onload: (response) => {
           if (response.status >= 200 && response.status < 300) {
             const blob = response.response;
@@ -1882,30 +2108,52 @@
       test: "You are an AI assistant helping a user with a test.",
       form: "You are an AI assistant helping a user with a form.",
     };
+    const cleanOptions = (options || []).map((option) => String(option).trim()).filter(Boolean);
+    const hasOptions = cleanOptions.length > 0;
+    const optionSection = hasOptions
+      ? `Available Options:\n${cleanOptions.map((option, index) => `${index + 1}. ${option}`).join("\n")}`
+      : "This is an open-ended question with no options. Answer it directly.";
 
     return `
 Context: ${contextMap[platform] || contextMap.quiz}
-The user needs to identify the correct answer(s) from the given options for the following question.
+The user needs ${hasOptions ? "to identify the correct answer(s) from the given options" : "a concise direct answer"} for the following question.
 ${hasImage ? "An image is associated with this question; please consider it in your analysis." : ""}
 
 Question: "${question}"
 
-Available Options:
-${options.map((opt, i) => `${i + 1}. ${opt}`).join("\n")}
+${optionSection}
 
 Please perform the following:
-1. Identify the correct answer or answers from the "Available Options" list.
-2. Provide a concise reasoning for your choice(s).
-3. Format your response clearly. Start with "Correct Answer(s):" followed by the answer(s), and then "Reasoning:" followed by your explanation. Be brief and to the point.
-Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
+1. ${hasOptions ? "Identify the correct answer or answers from the options." : "Answer the question directly."}
+2. Provide a concise reasoning for your answer.
+3. Start with "Correct Answer(s):" followed by the answer, then "Reasoning:" followed by a brief explanation.
+${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer text itself after Correct Answer(s):."}
 `;
   };
 
-  const handleAIResponse = (responseText, options, providerName = "AI") => {
-    GM_log(`[+] ${providerName} API Response:`, responseText);
-    showResponsePopup(responseText, false, "AI Assistant");
+  // The AI is asked to answer with "Correct Answer(s): ..."; pull just that part so it can be
+  // dropped into a text answer box while the reasoning stays in the notification.
+  const extractAnswerText = (responseText) => {
+    const text = String(responseText ?? "");
+    const match = text.match(/Correct Answer\(s\)?:\s*([\s\S]*?)(?:\n\s*Reasoning:|\n\s*\n|$)/i);
+    const answer = (match ? match[1] : "")
+      .replace(/\*\*|`/g, "")
+      .replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "")
+      .trim();
+    return answer || text.trim();
+  };
 
-    if (options && options.length > 0) {
+  const handleAIResponse = (responseText, options, providerName = "AI") => {
+    const hasOptions = Array.isArray(options) && options.length > 0;
+    GM_log(`[+] ${providerName} answer received`);
+    showResponsePopup(
+      `${responseText}\n\nAnswered by ${providerName}.`,
+      false,
+      "AI Assistant",
+      { fillText: hasOptions ? null : extractAnswerText(responseText) },
+    );
+
+    if (hasOptions) {
       const parsedAnswers = parseAiResponseForAnswers(responseText, options);
       if (parsedAnswers && parsedAnswers.length > 0) {
         GM_log(`[+] Auto-highlighting answers: ${parsedAnswers.join(', ')}`);
@@ -1954,40 +2202,43 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     return null;
   };
 
-  const sendAIRequest = (url, headers, payload, options, providerName) => {
-    showResponsePopup("Loading AI insights...", true, "AI Assistant");
-
-    GM_xmlhttpRequest({
-      method: "POST",
-      url,
-      headers,
-      data: JSON.stringify(payload),
-      onload: (response) => {
-        try {
-          const result = JSON.parse(response.responseText);
-          if (response.status < 200 || response.status >= 300 || result.error) {
-            const message = result.error?.message || result.error || result.message || `HTTP ${response.status}`;
-            showResponsePopup(`${providerName} API Error: ${message}`, false, "AI Assistant");
-            return;
+  // Resolves with { ok: true, text } or { ok: false, error } so the caller can move on to
+  // the next provider and only show one notification for the whole chain.
+  const sendAIRequest = (url, headers, payload, providerName) =>
+    new Promise((resolve) => {
+      GM_xmlhttpRequest({
+        method: "POST",
+        url,
+        headers,
+        data: JSON.stringify(payload),
+        timeout: 60000,
+        onload: (response) => {
+          try {
+            const result = JSON.parse(response.responseText);
+            if (response.status < 200 || response.status >= 300 || result.error) {
+              const message = result.error?.message || result.error || result.message || `HTTP ${response.status}`;
+              resolve({ ok: false, error: `${providerName}: ${message}` });
+              return;
+            }
+            const text = extractAIText(result, providerName);
+            if (!text) {
+              resolve({ ok: false, error: `${providerName}: could not parse a valid response` });
+              return;
+            }
+            GM_log(`[+] ${providerName} API Response:`, text);
+            resolve({ ok: true, text });
+          } catch (e) {
+            resolve({ ok: false, error: `${providerName}: failed to parse response (${e.message})` });
           }
-          const text = extractAIText(result, providerName);
-          if (text) {
-            handleAIResponse(text, options, providerName);
-          } else {
-            showResponsePopup(`${providerName} API Error: Could not parse a valid response.`, false, "AI Assistant");
-          }
-        } catch (e) {
-          showResponsePopup(`${providerName} API Error: Failed to parse response.\n${e.message}`, false, "AI Assistant");
-        }
-      },
-      onerror: (response) => showResponsePopup(`${providerName} API Error: Request failed. Status: ${response.status}`, false, "AI Assistant"),
-      ontimeout: () => showResponsePopup(`${providerName} API Error: Request timed out.`, false, "AI Assistant"),
+        },
+        onerror: (response) => resolve({ ok: false, error: `${providerName}: request failed (status ${response.status})` }),
+        ontimeout: () => resolve({ ok: false, error: `${providerName}: request timed out` }),
+      });
     });
-  };
 
-  const askGemini = async (question, options, imageData, platform = "quiz") => {
-    const apiKey = await getApiKey();
-    if (!apiKey) return;
+  const askGemini = (question, options, imageData, platform = "quiz", { promptIfMissing = true } = {}) => {
+    const apiKey = getApiKey("gemini", { promptIfMissing });
+    if (!apiKey) return { ok: false, error: "Gemini: no API key" };
 
     const promptText = buildGeminiPrompt(question, options, !!imageData, platform);
     const model = sharedState.config.geminiModel || 'gemini-3.5-flash-lite';
@@ -2015,15 +2266,12 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       ],
     };
 
-    sendAIRequest(url, { "Content-Type": "application/json" }, payload, options, "Gemini");
+    return sendAIRequest(url, { "Content-Type": "application/json" }, payload, "Gemini");
   };
 
-  const askOpenRouter = async (question, options, imageData, platform = "quiz") => {
-    const apiKey = sharedState.config.openrouterApiKey;
-    if (!apiKey || apiKey.trim() === "") {
-      alert("OpenRouter API Key is required. Please set it in the configuration.");
-      return;
-    }
+  const askOpenRouter = (question, options, imageData, platform = "quiz", { promptIfMissing = true } = {}) => {
+    const apiKey = getApiKey("openrouter", { promptIfMissing });
+    if (!apiKey) return { ok: false, error: "OpenRouter: no API key" };
 
     const promptText = buildGeminiPrompt(question, options, !!imageData, platform);
     const url = "https://openrouter.ai/api/v1/chat/completions";
@@ -2048,20 +2296,17 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       payload.top_p = sharedState.config.topP;
     }
 
-    sendAIRequest(url, {
+    return sendAIRequest(url, {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${apiKey}`,
       "HTTP-Referer": window.location.href,
       "X-Title": "UETS - Universal Educational Tool Suite",
-    }, payload, options, "OpenRouter");
+    }, payload, "OpenRouter");
   };
 
-  const askOpenCodeGo = async (question, options, imageData, platform = "quiz") => {
-    const apiKey = sharedState.config.opencodeGoApiKey?.trim();
-    if (!apiKey) {
-      alert("OpenCode Go API Key is required. Please set it in the configuration.");
-      return;
-    }
+  const askOpenCodeGo = (question, options, imageData, platform = "quiz", { promptIfMissing = true } = {}) => {
+    const apiKey = getApiKey("opencode-go", { promptIfMissing });
+    if (!apiKey) return { ok: false, error: "OpenCode Go: no API key" };
 
     const model = sharedState.config.opencodeGoModel || "gpt-5.6-luna";
     const maxTokens = sharedState.config.opencodeGoMaxTokens || 2048;
@@ -2082,7 +2327,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
           },
         });
       }
-      sendAIRequest(`${OPENCODE_GO_API_BASE}/messages`, {
+      return sendAIRequest(`${OPENCODE_GO_API_BASE}/messages`, {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
@@ -2091,8 +2336,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
         messages: [{ role: "user", content }],
         max_tokens: maxTokens,
         temperature: sharedState.config.temperature,
-      }, options, "OpenCode Go");
-      return;
+      }, "OpenCode Go");
     }
 
     if (OPENCODE_GO_RESPONSES_MODELS.has(model)) {
@@ -2103,15 +2347,14 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
           image_url: `data:${imageData.mimeType};base64,${imageData.base64Data}`,
         });
       }
-      sendAIRequest(`${OPENCODE_GO_API_BASE}/responses`, {
+      return sendAIRequest(`${OPENCODE_GO_API_BASE}/responses`, {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`,
       }, {
         model,
         input: [{ role: "user", content }],
         max_output_tokens: maxTokens,
-      }, options, "OpenCode Go");
-      return;
+      }, "OpenCode Go");
     }
 
     const content = [{ type: "text", text: promptText }];
@@ -2121,7 +2364,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
         image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64Data}` },
       });
     }
-    sendAIRequest(`${OPENCODE_GO_API_BASE}/chat/completions`, {
+    return sendAIRequest(`${OPENCODE_GO_API_BASE}/chat/completions`, {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${apiKey}`,
     }, {
@@ -2130,13 +2373,13 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       max_tokens: maxTokens,
       temperature: sharedState.config.temperature,
       top_p: sharedState.config.topP,
-    }, options, "OpenCode Go");
+    }, "OpenCode Go");
   };
 
-  const askDeepSeek = async (question, options, imageData, platform = "quiz") => {
+  const askDeepSeek = (question, options, _imageData, platform = "quiz") => {
     const promptText = buildGeminiPrompt(question, options, false, platform);
 
-    sendAIRequest(DEEPSEEK_API_URL, {
+    return sendAIRequest(DEEPSEEK_API_URL, {
       "Content-Type": "application/json",
       "Authorization": "Bearer anything",
     }, {
@@ -2146,7 +2389,127 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       max_tokens: sharedState.config.deepseekMaxTokens || 2048,
       temperature: sharedState.config.temperature,
       top_p: sharedState.config.topP,
-    }, options, "DeepSeek");
+    }, "DeepSeek");
+  };
+
+  const providerSupportsImages = (provider) =>
+    provider !== "deepseek" &&
+    !(provider === "opencode-go" && OPENCODE_GO_TEXT_ONLY_MODELS.has(sharedState.config.opencodeGoModel));
+
+  const providerHasCredentials = (provider) => {
+    const field = API_KEY_FIELDS[provider];
+    return !field || Boolean(String(sharedState.config[field] || "").trim());
+  };
+
+  const askProvider = (provider, question, options, imageData, platform, { promptIfMissing = false } = {}) => {
+    switch (provider) {
+      case "gemini":
+        return askGemini(question, options, imageData, platform, { promptIfMissing });
+      case "openrouter":
+        return askOpenRouter(question, options, imageData, platform, { promptIfMissing });
+      case "opencode-go":
+        return askOpenCodeGo(question, options, imageData, platform, { promptIfMissing });
+      default:
+        return askDeepSeek(question, options, imageData, platform);
+    }
+  };
+
+  // DeepSeek needs no key, so it is always available as a last resort.
+  const FALLBACK_PROVIDER_ORDER = ["gemini", "openrouter", "opencode-go", "deepseek"];
+
+  const askAIWithFallback = async (
+    question,
+    options,
+    imageData,
+    platform = "quiz",
+    { imageOnly = false, isCurrent = null } = {},
+  ) => {
+    if (isCurrent && !isCurrent()) return false;
+
+    const requestId = ++sharedState.aiRequestId;
+    const primary = sharedState.config.aiProvider || "deepseek";
+    const chain = [primary, ...FALLBACK_PROVIDER_ORDER.filter((provider) => provider !== primary)];
+    const hasImageProvider = imageOnly && chain.some((provider) =>
+      providerSupportsImages(provider) && (provider === primary || providerHasCredentials(provider)));
+    const failures = [];
+    let attempts = 0;
+
+    for (const provider of chain) {
+      if (requestId !== sharedState.aiRequestId) return false;
+      if (isCurrent && !isCurrent()) {
+        showResponsePopup("Question changed; the previous AI answer was discarded.", false, "AI Assistant");
+        return false;
+      }
+
+      const isPrimary = provider === primary;
+      if (!isPrimary && !providerHasCredentials(provider)) continue;
+      if (hasImageProvider && !providerSupportsImages(provider)) continue;
+
+      attempts += 1;
+      const label = PROVIDER_LABELS[provider] || provider;
+      showResponsePopup(
+        isPrimary ? "Loading AI insights..." : `Retrying with ${label} (attempt ${attempts})...`,
+        true,
+        "AI Assistant",
+      );
+
+      let result;
+      try {
+        result = await askProvider(provider, question, options, imageData, platform, { promptIfMissing: isPrimary });
+      } catch (error) {
+        result = { ok: false, error: `${label}: ${error?.message || error}` };
+      }
+
+      if (requestId !== sharedState.aiRequestId) return false;
+      if (isCurrent && !isCurrent()) {
+        showResponsePopup("Question changed; the previous AI answer was discarded.", false, "AI Assistant");
+        return false;
+      }
+      if (result?.ok) {
+        handleAIResponse(result.text, options, isPrimary ? label : `${label} (fallback)`);
+        return true;
+      }
+      if (result?.error) failures.push(result.error);
+    }
+
+    showResponsePopup(
+      `AI request failed.\n${failures.join("\n") || "No AI provider is configured."}`,
+      false,
+      "AI Assistant",
+    );
+    return false;
+  };
+
+  // Shared by the "Ask AI" button and the auto-ask flow.
+  const askAIForQuestion = async (questionText, options, imageUrl, platform = "quiz") => {
+    const provider = sharedState.config.aiProvider || "deepseek";
+    const questionId = platform === "quiz" ? waygroundModule.getCurrentQuestionId() : null;
+    const isCurrent = questionId
+      ? () => waygroundModule.getCurrentQuestionId() === questionId
+      : null;
+    const canUseImage = providerSupportsImages(provider) || FALLBACK_PROVIDER_ORDER.some(
+      (fallback) => fallback !== provider && providerHasCredentials(fallback) && providerSupportsImages(fallback),
+    );
+    let imageData = null;
+
+    if (imageUrl && sharedState.config.includeImages && canUseImage) {
+      try {
+        imageData = await fetchImageAsBase64(imageUrl);
+      } catch (error) {
+        GM_log("[!] Image fetch failed, continuing with text only:", error);
+        showResponsePopup(`Failed to fetch image: ${error}\nProceeding with text only.`);
+      }
+    }
+
+    const hasText = Boolean(String(questionText || "").trim());
+    const question = hasText
+      ? questionText
+      : (imageData ? "(See attached image)" : "(No question text was extracted)");
+
+    return askAIWithFallback(question, options, imageData, platform, {
+      imageOnly: !hasText && Boolean(imageData),
+      isCurrent,
+    });
   };
 
   // === PARSE AI RESPONSE FOR ANSWER HIGHLIGHTING ===
@@ -2197,6 +2560,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     content,
     isLoading = false,
     title = "AI Assistant",
+    { fillText = null } = {},
   ) => {
     if (!sharedState.uiModificationsEnabled) {
       if (sharedState.geminiPopup) {
@@ -2230,17 +2594,70 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       }
     };
 
+    // Longer answers stay up longer, and hovering pauses the countdown so
+    // there is time to read/copy before it disappears.
+    const armDismiss = (textLength = 0) => {
+      if (sharedState.toastDismissTimeout) {
+        clearTimeout(sharedState.toastDismissTimeout);
+      }
+      const dwell = Math.max(8000, Math.min(20000, 2000 + textLength * 40));
+      sharedState.toastDismissTimeout = setTimeout(removePopup, dwell);
+    };
+
     if (!popup) {
       popup = document.createElement("div");
       popup.id = "uets-gemini-popup";
       popup.classList.add("uets-response-popup");
+      hideFromReplay(popup);
 
       const contentDiv = document.createElement("div");
       contentDiv.classList.add("uets-response-popup-content");
       popup.appendChild(contentDiv);
 
+      const copyButton = document.createElement("button");
+      copyButton.classList.add("uets-response-popup-copy");
+      copyButton.type = "button";
+      copyButton.title = "Copy";
+      copyButton.setAttribute("aria-label", "Copy text");
+      copyButton.onclick = (e) => {
+        e.stopPropagation();
+        GM_setClipboard(copyButton.dataset.copy || "");
+        copyButton.classList.add("uets-copied");
+        setTimeout(() => copyButton.classList.remove("uets-copied"), 1200);
+      };
+      popup.appendChild(copyButton);
+
+      const fillButton = document.createElement("button");
+      fillButton.classList.add("uets-response-popup-fill");
+      fillButton.type = "button";
+      fillButton.title = "Insert into answer box";
+      fillButton.setAttribute("aria-label", "Insert into answer box");
+      fillButton.onclick = (e) => {
+        e.stopPropagation();
+        const filled = fillAnswerEditor(fillButton.dataset.fill || "");
+        if (filled === true) {
+          fillButton.classList.add("uets-copied");
+          setTimeout(() => fillButton.classList.remove("uets-copied"), 1200);
+          return;
+        }
+        if (filled === null) return;
+
+        const container = popup.querySelector(".uets-response-popup-content");
+        if (container && !container.querySelector(".uets-fill-note")) {
+          const note = document.createElement("div");
+          note.classList.add("uets-fill-note");
+          note.textContent = "Could not find a text answer box on this page.";
+          container.appendChild(note);
+        }
+        armDismiss(0);
+      };
+      popup.appendChild(fillButton);
+
       const closeButton = document.createElement("button");
       closeButton.classList.add("uets-response-popup-close");
+      closeButton.type = "button";
+      closeButton.title = "Close";
+      closeButton.setAttribute("aria-label", "Close notification");
       closeButton.onclick = (e) => {
         e.stopPropagation();
         removePopup();
@@ -2249,6 +2666,17 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
 
       // Click anywhere on toast to dismiss
       popup.onclick = removePopup;
+      popup.onmouseenter = () => {
+        if (sharedState.toastDismissTimeout) {
+          clearTimeout(sharedState.toastDismissTimeout);
+          sharedState.toastDismissTimeout = null;
+        }
+      };
+      popup.onmouseleave = () => {
+        if (!popup._uetsLoading) {
+          armDismiss((popup.querySelector(".uets-response-popup-content")?.textContent || "").length);
+        }
+      };
 
       document.body.appendChild(popup);
       sharedState.geminiPopup = popup;
@@ -2256,9 +2684,18 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
 
     // Reset the dismiss animation class if popup was being dismissed
     popup.classList.remove("uets-toast-dismiss");
+    popup.setAttribute("role", "status");
+    popup.setAttribute("aria-label", title);
 
     const contentDiv = popup.querySelector(".uets-response-popup-content");
+    const copyButton = popup.querySelector(".uets-response-popup-copy");
+    const fillButton = popup.querySelector(".uets-response-popup-fill");
+    const fillValue = isLoading ? "" : String(fillText ?? "").trim();
+    popup._uetsLoading = isLoading;
     contentDiv.textContent = "";
+    copyButton.style.display = isLoading ? "none" : "";
+    fillButton.style.display = fillValue ? "" : "none";
+    fillButton.dataset.fill = fillValue;
     if (isLoading) {
       const loading = document.createElement("div");
       loading.classList.add("uets-response-popup-loading");
@@ -2270,15 +2707,14 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       contentDiv.appendChild(loading);
     } else {
       appendFormattedPopupText(contentDiv, content);
+      copyButton.dataset.copy = String(content ?? "");
     }
 
     popup.style.display = "flex";
 
-    // Auto-dismiss after 7.5 seconds (only if not loading)
-    if (!isLoading) {
-      sharedState.toastDismissTimeout = setTimeout(() => {
-        removePopup();
-      }, 7500);
+    // Auto-dismiss (only if not loading); the timer is paused on hover.
+    if (!isLoading && !popup.matches(":hover")) {
+      armDismiss(String(content ?? "").length);
     }
   };
 
@@ -2391,32 +2827,26 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     sharedState.toggleButton = document.createElement("button");
     sharedState.toggleButton.id = "uets-toggle-ui-button";
     sharedState.toggleButton.type = "button";
-    sharedState.toggleButton.setAttribute("aria-label", "Toggle UETS interface; press four times for settings");
+    sharedState.toggleButton.setAttribute("aria-label", "Toggle UETS interface; double-click for settings");
+    hideFromReplay(sharedState.toggleButton);
     updateToggleButtonAppearance();
 
-    // Tap/click counter for config GUI
-    let lastTapTime = 0;
+    // One tap toggles the UI; two or more quick taps open settings without first
+    // flickering the injected controls off and on. This also preserves 4-tap on touch.
     let tapCount = 0;
-    const TAP_WINDOW_MS = 500;
+    let tapTimer = null;
+    const TAP_WINDOW_MS = 300;
 
-    const handleTap = () => {
-      const now = Date.now();
-      if (now - lastTapTime < TAP_WINDOW_MS) {
-        tapCount += 1;
-      } else {
-        tapCount = 1;
-      }
-      lastTapTime = now;
-
-      if (tapCount === 4) {
-        createConfigGui();
+    sharedState.toggleButton.addEventListener("click", () => {
+      tapCount += 1;
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => {
+        if (tapCount === 1) handleToggleUiClick();
+        else createConfigGui();
         tapCount = 0;
-      } else if (tapCount === 1) {
-        handleToggleUiClick();
-      }
-    };
-
-    sharedState.toggleButton.addEventListener("click", handleTap);
+        tapTimer = null;
+      }, TAP_WINDOW_MS);
+    });
 
     document.body.appendChild(sharedState.toggleButton);
   };
@@ -2435,6 +2865,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
 
     // Format the answer text for display
     let displayText = "";
+    let fillText = null;
     const answer = detectedAnswer.formattedAnswer;
 
     switch (answer.type) {
@@ -2456,10 +2887,12 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
 
       case 'text':
         displayText = `${answer.text}`;
+        fillText = displayText;
         break;
 
       case 'generic':
         displayText = `${answer.text}`;
+        fillText = displayText;
         break;
 
       default:
@@ -2468,7 +2901,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
 
     // Show the answer popup
     setTimeout(() => {
-      showResponsePopup(displayText, false, "Detected Answer");
+      showResponsePopup(displayText, false, "Detected Answer", { fillText });
     }, 200);
   };
 
@@ -2946,6 +3379,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       );
 
       const currentQuestionId = waygroundModule.getCurrentQuestionId();
+      let serverHasAnswer = false;
       if (currentQuestionId !== sharedState.currentQuestionId) {
         const previousQuestionId = sharedState.currentQuestionId;
         sharedState.currentQuestionId = currentQuestionId;
@@ -2962,8 +3396,11 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
               ? questionData.structure.options.map((opt) => opt.id)
               : [],
           );
+          // Do not apply a slow response to a question that has already changed.
+          if (waygroundModule.getCurrentQuestionId() !== currentQuestionId) return;
 
-          if (response && response.hasAnswer) {
+          if (response && response.hasAnswer && hasUsableAnswer(response.correctAnswers)) {
+            serverHasAnswer = true;
             highlightCorrectAnswers(
               response.correctAnswers,
               response.questionType,
@@ -3044,6 +3481,23 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
             true,
             "DDG",
           );
+
+          // Ask the AI automatically once per question when neither the quiz payload nor
+          // the crowdsourced server knows the answer.
+          const answerKnown =
+            Boolean(currentQuestionId && sharedState.detectedAnswers[currentQuestionId]?.formattedAnswer) ||
+            serverHasAnswer;
+          if (answerKnown && currentQuestionId) sharedState.autoAIAsked.add(currentQuestionId);
+          if (
+            sharedState.config.autoAIWhenUnknown &&
+            !answerKnown &&
+            currentQuestionId &&
+            !sharedState.autoAIAsked.has(currentQuestionId)
+          ) {
+            sharedState.autoAIAsked.add(currentQuestionId);
+            GM_log(`[*] No known answer for ${currentQuestionId}, asking the AI automatically`);
+            askAIForQuestion(questionTitle, optionTexts, questionImageUrl, "quiz");
+          }
         }
       }
     },
@@ -3072,6 +3526,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       ) {
         const bonusSpan = document.createElement("span");
         bonusSpan.classList.add("uets-streak-bonus");
+        hideFromReplay(bonusSpan);
         streakSpan.parentNode.insertBefore(bonusSpan, streakSpan.nextSibling);
 
         const updateBonus = () => {
@@ -3254,7 +3709,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
         }
       }
 
-      askGemini(questionTitle, options, null, "form");
+      await askAIForQuestion(questionTitle, options, null, "form");
     },
 
     handleDdgClick: (event) => {
@@ -3396,7 +3851,7 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       // Enhanced answer detection and storage
       if (questionData.structure && questionData.structure.answer !== undefined) {
         const correctAnswerData = questionData.structure.answer;
-        const hasCorrectAnswer = questionData.structure.settings?.hasCorrectAnswer || (correctAnswerData !== null && correctAnswerData !== undefined);
+        const hasCorrectAnswer = hasUsableAnswer(correctAnswerData);
 
         if (hasCorrectAnswer) {
           GM_log(`[+] Correct Answer Data: ${JSON.stringify(correctAnswerData)}`);
@@ -3452,6 +3907,11 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
             GM_log(`[+] Generic Correct Answer: ${correctAnswerData}`);
           }
 
+          if (!answerInfo.formattedAnswer) {
+            GM_log(`[!] Ignoring unusable answer for question: ${questionKey}`);
+            continue;
+          }
+
           // Store in our local detected answers list with BOTH the current key AND the _id if it exists
           sharedState.detectedAnswers[questionKey] = answerInfo;
 
@@ -3469,6 +3929,32 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     GM_log(`[+] Processed ${questionKeys.length} questions, ${Object.keys(sharedState.detectedAnswers).length} total answer mappings stored`);
   };
 
+  // === TELEMETRY BLOCKING ===
+  // player-infraction reports tab switches / focus loss, and the anserverv2 beacon is the
+  // product analytics stream (deviceId + sessionId + event names). The beacon is sent with
+  // navigator.sendBeacon, so hooking fetch/XHR alone would miss it.
+  const BLOCKED_TELEMETRY_PATTERNS = [
+    "player-infraction",
+    "_anserverv2/main/api",
+  ];
+
+  const isBlockedTelemetryUrl = (url) => {
+    const text = url instanceof URL ? url.href : String(url || "");
+    if (!text.includes("wayground.com") && !text.includes("quizizz.com")) return false;
+    return BLOCKED_TELEMETRY_PATTERNS.some((pattern) => text.includes(pattern));
+  };
+
+  if (typeof navigator.sendBeacon === "function") {
+    const originalSendBeacon = navigator.sendBeacon.bind(navigator);
+    navigator.sendBeacon = function (url, data) {
+      if (isBlockedTelemetryUrl(String(url))) {
+        GM_log(`[+] Blocked sendBeacon: ${String(url).split("?")[0]}`);
+        return true; // Pretend it was queued, the caller never reports failures.
+      }
+      return originalSendBeacon(url, data);
+    };
+  }
+
   // === REQUEST INTERCEPTION ===
   const originalXMLHttpRequestOpen = XMLHttpRequest.prototype.open;
   const originalXMLHttpRequestSend = XMLHttpRequest.prototype.send;
@@ -3478,7 +3964,8 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
     this._url = url;
 
     // Check if URL should be blocked
-    if (siteOptimizations.shouldBlockUrl(url)) {
+    if (siteOptimizations.shouldBlockUrl(url) ||
+      (String(method).toUpperCase() === "POST" && isBlockedTelemetryUrl(url))) {
       this._shouldBlock = true;
       GM_log(`[+] Marked XHR for blocking: ${url}`);
       // Still call original open to prevent errors
@@ -3550,14 +4037,6 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       return;
     }
 
-    // Block player-infraction telemetry (reports tab switches, focus loss, etc.)
-    const isPlayerInfraction = this._url?.includes("player-infraction") &&
-      (this._url?.includes("wayground.com") || this._url?.includes("quizizz.com"));
-    if (this._method === "POST" && isPlayerInfraction) {
-      GM_log("[+] Blocked player-infraction telemetry request");
-      return;
-    }
-
     // Intercept POST requests to proceedGame and modify timeTaken
     const isProceed = isWaygroundProceedUrl(this._url);
     const isWaygroundQuizizz = this._url?.includes("wayground.com") || this._url?.includes("quizizz.com");
@@ -3619,10 +4098,12 @@ Please ensure your answer(s) are 1-indexed, starting from 1 as the first option.
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200, statusText: "OK" }));
     }
 
-    // Block player-infraction telemetry (reports tab switches, focus loss, etc.)
-    if (urlString.includes("player-infraction") && isWaygroundQuizizz && options?.method === "POST") {
-      GM_log("[+] Blocked player-infraction telemetry request");
-      return Promise.resolve(new Response(JSON.stringify({}), { status: 200, statusText: "OK" }));
+    // Block telemetry: tab/focus reports and the product analytics beacon.
+    const requestMethod = options?.method ||
+      (typeof Request !== "undefined" && url instanceof Request ? url.method : "GET");
+    if (isBlockedTelemetryUrl(urlString) && String(requestMethod).toUpperCase() === "POST") {
+      GM_log(`[+] Blocked telemetry request: ${urlString.split("?")[0]}`);
+      return Promise.resolve(new Response(null, { status: 204, statusText: "No Content" }));
     }
 
     // Intercept POST requests to proceedGame via fetch

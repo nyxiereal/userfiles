@@ -10,9 +10,11 @@ Collection of userscripts that I made for various purposes.
 A multi-cheat tool for some educational platforms.
 
 - Supports Quizizz/Wayground, Google Forms, and Kahoot.
-- Universal features: Adding AI, copy prompt, copy text, and DDG buttons to questions and some answers. Doesn't work on Kahoot.
-- Hides itself quickly - at the press of a button, press the bottom-left corner of the screen to reveal/hide the edits.
-- Quizizz/Wayground: Crowdsourcing answers (every time you answer a question, its correct answer gets sent to the server, and when you encounter the same question, it will show you the correct answer), improved streak bonus counter, forced quick answer times (you'll always get the bonus points), hijack timer for bonus points.
+- Universal features: Adding AI, copy prompt, copy text, and DDG buttons to questions and some answers. Doesn't work on Kahoot. AI answers appear as a notification with a copy button, and text answers can be dropped into the answer box with the pencil button.
+- AI: if the selected provider fails or is rate limited, the request is retried with the next configured provider (the hosted DeepSeek endpoint needs no key, so it is always the last resort).
+- Optional auto-ask: when neither the quiz payload nor the crowdsourced server knows the answer, one AI provider chain starts automatically as soon as the question appears (off by default).
+- Hides itself quickly - click the floating button in the bottom-left corner to toggle the edits. Double-click it (or use your userscript manager's menu -> UETS Settings) to open the settings.
+- Quizizz/Wayground: Crowdsourcing answers (every time you answer a question, its correct answer gets sent to the server, and when you encounter the same question, it will show you the correct answer), improved streak bonus counter, forced quick answer times (you'll always get the bonus points, and the spoofed time follows a human reading/reaction estimate of the actual question instead of a flat random number), hijack timer for bonus points, and blocked tab-switch/focus plus analytics telemetry.
 - Kahoot: Crowdsourcing answers (you'll automatically get connected to any other person who has the script installed, their answers will be shown to you, and vice versa. This is so you can make an educated guess about the answer/s.).
 
 ### UETS Server setup
