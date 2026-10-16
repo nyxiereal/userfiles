@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.11.1
+// @version      1.12.0
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -40,15 +40,15 @@
     serverUrl: "https://uets.meowery.eu",
     aiProvider: "deepseek",
     geminiApiKey: "",
-    geminiModel: "gemini-3.5-flash-lite",
-    geminiThinkingBudget: 512,
+    geminiModel: "gemini-3.8-flash",
+    geminiThinkingLevel: "low",
     openrouterApiKey: "",
-    openrouterModel: "openai/gpt-5.6-luna",
+    openrouterModel: "openai/gpt-6-luna",
     openrouterMaxTokens: 2048,
     openrouterReasoningMaxTokens: 2000,
     openrouterReasoningEffort: "medium",
     opencodeGoApiKey: "",
-    opencodeGoModel: "gpt-5.6-luna",
+    opencodeGoModel: "gpt-6-luna",
     opencodeGoMaxTokens: 2048,
     deepseekMaxTokens: 2048,
     maxOutputTokens: 1024,
@@ -85,102 +85,127 @@
 
   const DEEPSEEK_API_URL = "https://q5dh1rfszfym23hj.us-east-2.aws.endpoints.huggingface.cloud/v1/chat/completions";
   const DEEPSEEK_MODEL = "deepseek-ai/DeepSeek-V4-Flash-0731";
-  const OPENCODE_GO_API_BASE = "https://opencode.ai/zen/go/v1";
+  const OPENCODE_GO_API_BASE = "https://opencode.ai/inference/go/openai/v1";
+  const OPENCODE_GO_ANTHROPIC_API_BASE = "https://opencode.ai/inference/go/anthropic/v1";
 
   const GEMINI_MODEL_MIGRATIONS = {
-    "gemini-flash-lite-latest": "gemini-3.5-flash-lite",
-    "gemini-flash-latest": "gemini-3.6-flash",
-    "gemini-3-pro-preview": "gemini-3.1-pro-preview",
-    "gemini-3-flash-preview": "gemini-3.6-flash",
+    "gemini-flash-lite-latest": "gemini-3.8-flash",
+    "gemini-3.5-flash-lite": "gemini-3.8-flash",
+    "gemini-flash-latest": "gemini-3.8-flash",
+    "gemini-3-flash-preview": "gemini-3.8-flash",
+    "gemini-3.5-flash": "gemini-3.8-flash",
+    "gemini-3.6-flash": "gemini-3.8-flash",
+    "gemini-3.7-flash": "gemini-3.8-flash",
+    "gemini-3-pro-preview": "gemini-4-argon",
+    "gemini-3.1-pro-preview": "gemini-4-argon",
   };
 
   const OPENROUTER_MODEL_MIGRATIONS = {
-    "google/gemini-2.5-flash-lite": "google/gemini-3.5-flash-lite",
-    "google/gemini-3.1-flash-lite": "google/gemini-3.5-flash-lite",
-    "openai/gpt-5-nano": "openai/gpt-5.6-luna",
-    "openai/gpt-5.4-nano": "openai/gpt-5.6-luna",
-    "x-ai/grok-4.1-fast": "x-ai/grok-4.5",
-    "x-ai/grok-4.3": "x-ai/grok-4.5",
-    "google/gemini-3-flash-preview": "google/gemini-3.6-flash",
-    "google/gemini-3.5-flash": "google/gemini-3.6-flash",
-    "bytedance-seed/seed-1.6-flash": "qwen/qwen3.7-flash",
-    "qwen/qwen3.7-plus": "qwen/qwen3.7-flash",
+    "google/gemini-2.5-flash-lite": "anthropic/claude-haiku-5.5",
+    "google/gemini-3.1-flash-lite": "anthropic/claude-haiku-5.5",
+    "google/gemini-3.5-flash-lite": "anthropic/claude-haiku-5.5",
+    "openai/gpt-5-nano": "openai/gpt-6-luna",
+    "openai/gpt-5.4-nano": "openai/gpt-6-luna",
+    "openai/gpt-5.6-luna": "openai/gpt-6-luna",
+    "x-ai/grok-4.1-fast": "x-ai/grok-4.7",
+    "x-ai/grok-4.3": "x-ai/grok-4.7",
+    "x-ai/grok-4.5": "x-ai/grok-4.7",
+    "google/gemini-3-flash-preview": "google/gemini-3.8-flash",
+    "google/gemini-3.5-flash": "google/gemini-3.8-flash",
+    "google/gemini-3.6-flash": "google/gemini-3.8-flash",
+    "google/gemini-3.7-flash": "google/gemini-3.8-flash",
+    "bytedance-seed/seed-1.6-flash": "qwen/qwen3.8-flash",
+    "qwen/qwen3.7-plus": "qwen/qwen3.8-flash",
+    "qwen/qwen3.7-flash": "qwen/qwen3.8-flash",
     "moonshotai/kimi-k2.5": "moonshotai/kimi-k3",
     "moonshotai/kimi-k2.6": "moonshotai/kimi-k3",
   };
 
   const OPENCODE_GO_MODEL_MIGRATIONS = {
-    "mimo-v2.5": "mimo-v2.5-pro",
-    hy3: "deepseek-v4-flash",
-    "qwen3.6-plus": "qwen3.7-plus",
-    "minimax-m3": "qwen3.7-plus",
-    "minimax-m2.7": "qwen3.7-plus",
-    "glm-5.1": "glm-5.2",
+    "gpt-5.6-luna": "gpt-6-luna",
+    "deepseek-v4-flash": "deepseek-v4.1-flash",
+    "mimo-v2.5": "mimo-v2.6-pro",
+    "mimo-v2.5-pro": "mimo-v2.6-pro",
+    hy3: "deepseek-v4.1-flash",
+    "qwen3.6-plus": "qwen3.8-flash",
+    "qwen3.7-plus": "qwen3.8-flash",
+    "qwen3.7-max": "qwen3.8-max",
+    "minimax-m3": "qwen3.8-flash",
+    "minimax-m2.7": "qwen3.8-flash",
+    "glm-5.1": "glm-5.3",
+    "glm-5.2": "glm-5.3",
     "kimi-k2.6": "kimi-k3",
     "kimi-k2.7-code": "kimi-k3",
-    "grok-4.5": "gpt-5.6-luna",
+    "grok-4.5": "gpt-6-luna",
   };
 
   const OPENCODE_GO_ANTHROPIC_MODELS = new Set([
-    "qwen3.7-max",
-    "qwen3.7-plus",
+    "claude-haiku-5-5",
+    "qwen3.8-max",
+    "qwen3.8-flash",
   ]);
-  const OPENCODE_GO_RESPONSES_MODELS = new Set(["gpt-5.6-luna"]);
+  const OPENCODE_GO_RESPONSES_MODELS = new Set(["gpt-6-luna"]);
   const OPENCODE_GO_TEXT_ONLY_MODELS = new Set([
-    "deepseek-v4-flash",
     "deepseek-v4-pro",
+    "glm-5.3",
+  ]);
+  const OPENCODE_GO_NO_SAMPLING_MODELS = new Set([
+    "gpt-6-luna",
+    "claude-haiku-5-5",
+    "kimi-k3",
   ]);
 
+  // Catalog snapshot: OpenRouter /api/v1/models and models.dev/api.json, 2026-10-16.
   const MODEL_PRICING = {
     gemini: {
-      "gemini-3.5-flash-lite": { input: 0.3, output: 2.5 },
-      "gemini-3.6-flash": { input: 1.5, output: 7.5 },
-      "gemini-3.5-flash": { input: 1.5, output: 9 },
-      "gemini-3.1-pro-preview": {
-        input: 2,
-        output: 12,
-        tiers: [{ context: "Above 200K context", input: 4, output: 18 }],
-      },
+      "gemini-3.8-flash": { input: 0.75, output: 3.75 },
+      "gemini-4-argon": { input: 2, output: 10 },
     },
     openrouter: {
-      "google/gemini-3.5-flash-lite": { input: 0.3, output: 2.5 },
-      "openai/gpt-5.6-luna": {
+      "anthropic/claude-haiku-5.5": {
         input: 0.1,
-        output: 0.6,
-        tiers: [{ context: "272K+ context", input: 0.2, output: 0.9 }],
+        output: 0.5,
+        tiers: [{ context: "100K+ context", input: 0.5, output: 2.5 }],
       },
-      "x-ai/grok-4.5": {
+      "openai/gpt-6-luna": {
+        input: 0.1,
+        output: 0.5,
+        tiers: [{ context: "272K+ context", input: 0.2, output: 0.75 }],
+      },
+      "x-ai/grok-4.7": {
         input: 2,
         output: 6,
         tiers: [{ context: "200K+ context", input: 4, output: 12 }],
       },
-      "google/gemini-3.6-flash": { input: 1.5, output: 7.5 },
-      "qwen/qwen3.7-flash": {
-        input: 0.03,
-        output: 0.13,
-        tiers: [
-          { context: "32K+ context", input: 0.1, output: 0.4 },
-          { context: "256K+ context", input: 0.2, output: 0.8 },
-        ],
-      },
-      "moonshotai/kimi-k3": { input: 3, output: 15 },
+      "google/gemini-3.8-flash": { input: 0.825, output: 4.125 },
+      "qwen/qwen3.8-flash": { input: 0.15, output: 0.47 },
+      "moonshotai/kimi-k3": { input: 0.304, output: 11.936 },
     },
     "opencode-go": {
-      "deepseek-v4-flash": { input: 0.14, output: 0.28 },
-      "mimo-v2.5-pro": { input: 0.435, output: 0.87 },
-      "qwen3.7-plus": {
-        input: 0.4,
-        output: 1.6,
-        tiers: [{ context: "Above 256K context", input: 1.2, output: 4.8 }],
+      "claude-haiku-5-5": {
+        input: 0.1,
+        output: 0.5,
+        tiers: [{ context: "Above 100K context", input: 0.5, output: 2.5 }],
       },
-      "qwen3.7-max": { input: 2.5, output: 7.5 },
-      "deepseek-v4-pro": { input: 0.435, output: 0.87 },
-      "glm-5.2": { input: 1.4, output: 4.4 },
+      "deepseek-v4.1-flash": {
+        input: 0.15,
+        output: 0.6,
+        note: "Peak hours: $0.30 / $1.20 (Mon-Fri, 01-04 and 06-10 UTC).",
+      },
+      "mimo-v2.6-pro": { input: 0.435, output: 0.87 },
+      "qwen3.8-flash": { input: 0.15, output: 0.47 },
+      "qwen3.8-max": { input: 2, output: 6 },
+      "deepseek-v4-pro": {
+        input: 0.66,
+        output: 1.98,
+        note: "Peak hours: $1.32 / $3.96 (Mon-Fri, 01-04 and 06-10 UTC).",
+      },
+      "glm-5.3": { input: 1.4, output: 4.4 },
       "kimi-k3": { input: 3, output: 15 },
-      "gpt-5.6-luna": {
-        input: 0.2,
-        output: 1.2,
-        tiers: [{ context: "Above 272K context", input: 0.4, output: 1.8 }],
+      "gpt-6-luna": {
+        input: 0.1,
+        output: 0.5,
+        tiers: [{ context: "Above 272K context", input: 0.2, output: 0.75 }],
       },
     },
     deepseek: {
@@ -195,19 +220,23 @@
   const MODEL_PRICING_SOURCES = {
     gemini: "models.dev",
     openrouter: "OpenRouter model API",
-    "opencode-go": "OpenCode Go docs",
+    "opencode-go": "models.dev and OpenCode Go docs",
     deepseek: "Hosted endpoint",
   };
 
-  // Models that use effort-based reasoning
-  const OPENROUTER_EFFORT_MODELS = new Set([
-    "google/gemini-3.5-flash-lite",
-    "openai/gpt-5.6-luna",
-    "x-ai/grok-4.5",
-    "google/gemini-3.6-flash",
-    "moonshotai/kimi-k3",
+  const OPENROUTER_REASONING_EFFORTS = {
+    "anthropic/claude-haiku-5.5": ["none", "low", "medium", "high", "xhigh", "max"],
+    "openai/gpt-6-luna": ["none", "low", "medium", "high", "xhigh", "max"],
+    "x-ai/grok-4.7": ["low", "medium", "high", "xhigh"],
+    "google/gemini-3.8-flash": ["low", "medium", "high"],
+    "moonshotai/kimi-k3": ["none", "low", "high", "max"],
+  };
+  const getOpenRouterReasoningEffort = (model, effort) =>
+    OPENROUTER_REASONING_EFFORTS[model]?.includes(effort) ? effort : "low";
+  const OPENROUTER_NO_SAMPLING_MODELS = new Set([
+    "openai/gpt-6-luna",
+    "anthropic/claude-haiku-5.5",
   ]);
-  const OPENROUTER_NO_SAMPLING_MODELS = new Set(["openai/gpt-5.6-luna"]);
 
 
   const PROFILES = {
@@ -1509,7 +1538,7 @@
             ),
             el('div', { class: 'uets-config-item' },
               el('div', { class: 'uets-config-label-container' },
-                el('button', { class: 'uets-config-info', 'data-info': 'Whether to include question images when the selected model supports them. Hosted and OpenCode Go DeepSeek V4 models are text-only.', title: 'Info' }),
+                el('button', { class: 'uets-config-info', 'data-info': 'Whether to include question images when the selected model supports them. Hosted DeepSeek, OpenCode Go DeepSeek V4 Pro, and GLM-5.3 are text-only.', title: 'Info' }),
                 el('label', { class: 'uets-config-label' }, 'Include images'),
               ),
               el('label', { class: 'uets-switch' },
@@ -1542,10 +1571,8 @@
                   el('label', { class: 'uets-config-label' }, 'Model'),
                 ),
                 el('select', { class: 'uets-config-select', id: 'geminiModel', style: 'width: 200px;' },
-                  el('option', { value: 'gemini-3.5-flash-lite' }, 'gemini-3.5-flash-lite'),
-                  el('option', { value: 'gemini-3.6-flash' }, 'gemini-3.6-flash'),
-                  el('option', { value: 'gemini-3.5-flash' }, 'gemini-3.5-flash'),
-                  el('option', { value: 'gemini-3.1-pro-preview' }, 'gemini-3.1-pro-preview'),
+                  el('option', { value: 'gemini-3.8-flash' }, 'Gemini 3.8 Flash'),
+                  el('option', { value: 'gemini-4-argon' }, 'Gemini 4 Argon'),
                 ),
               ),
               el('div', { class: 'uets-config-item', style: 'align-items: flex-start;' },
@@ -1557,10 +1584,14 @@
               ),
               el('div', { class: 'uets-config-item' },
                 el('div', { class: 'uets-config-label-container' },
-                  el('button', { class: 'uets-config-info', 'data-info': 'Budget for thinking in the AI model (min 512 tokens). Can increase output response quality, but increases the waiting time for the answer. I recommend 512 or 1024 tokens.', title: 'Info' }),
-                  el('label', { class: 'uets-config-label' }, 'Thinking budget'),
+                  el('button', { class: 'uets-config-info', 'data-info': 'Thinking effort for Gemini. Higher effort can improve quality but increases response time.', title: 'Info' }),
+                  el('label', { class: 'uets-config-label' }, 'Thinking level'),
                 ),
-                el('input', { type: 'number', class: 'uets-config-input', id: 'geminiThinkingBudget', min: '512', max: '8192' }),
+                el('select', { class: 'uets-config-select', id: 'geminiThinkingLevel', style: 'width: 200px;' },
+                  el('option', { value: 'low' }, 'Low'),
+                  el('option', { value: 'medium' }, 'Medium'),
+                  el('option', { value: 'high' }, 'High'),
+                ),
               ),
               el('div', { class: 'uets-config-item' },
                 el('div', { class: 'uets-config-label-container' },
@@ -1606,11 +1637,11 @@
                   el('label', { class: 'uets-config-label' }, 'Model'),
                 ),
                 el('select', { class: 'uets-config-select', id: 'openrouterModel', style: 'width: 200px;' },
-                  el('option', { value: 'openai/gpt-5.6-luna' }, 'openai/gpt-5.6-luna'),
-                  el('option', { value: 'google/gemini-3.5-flash-lite' }, 'google/gemini-3.5-flash-lite'),
-                  el('option', { value: 'x-ai/grok-4.5' }, 'x-ai/grok-4.5'),
-                  el('option', { value: 'google/gemini-3.6-flash' }, 'google/gemini-3.6-flash'),
-                  el('option', { value: 'qwen/qwen3.7-flash' }, 'qwen/qwen3.7-flash'),
+                  el('option', { value: 'openai/gpt-6-luna' }, 'openai/gpt-6-luna'),
+                  el('option', { value: 'anthropic/claude-haiku-5.5' }, 'anthropic/claude-haiku-5.5'),
+                  el('option', { value: 'x-ai/grok-4.7' }, 'x-ai/grok-4.7'),
+                  el('option', { value: 'google/gemini-3.8-flash' }, 'google/gemini-3.8-flash'),
+                  el('option', { value: 'qwen/qwen3.8-flash' }, 'qwen/qwen3.8-flash'),
                   el('option', { value: 'moonshotai/kimi-k3' }, 'moonshotai/kimi-k3'),
                 ),
               ),
@@ -1656,11 +1687,11 @@
                 ),
                 el('select', { class: 'uets-config-select', id: 'openrouterReasoningEffort', style: 'width: 200px;' },
                   el('option', { value: 'none' }, 'None'),
-                  el('option', { value: 'minimal' }, 'Minimal'),
                   el('option', { value: 'low' }, 'Low'),
                   el('option', { value: 'medium' }, 'Medium'),
                   el('option', { value: 'high' }, 'High'),
                   el('option', { value: 'xhigh' }, 'Extra High'),
+                  el('option', { value: 'max' }, 'Max'),
                 ),
               ),
             ),
@@ -1679,14 +1710,15 @@
                   el('label', { class: 'uets-config-label' }, 'Model'),
                 ),
                 el('select', { class: 'uets-config-select', id: 'opencodeGoModel', style: 'width: 200px;' },
-                  el('option', { value: 'gpt-5.6-luna' }, 'GPT 5.6 Luna'),
-                  el('option', { value: 'deepseek-v4-flash' }, 'DeepSeek V4 Flash'),
+                  el('option', { value: 'gpt-6-luna' }, 'GPT 6 Luna'),
+                  el('option', { value: 'claude-haiku-5-5' }, 'Claude Haiku 5.5'),
+                  el('option', { value: 'deepseek-v4.1-flash' }, 'DeepSeek V4.1 Flash'),
                   el('option', { value: 'deepseek-v4-pro' }, 'DeepSeek V4 Pro'),
-                  el('option', { value: 'qwen3.7-max' }, 'Qwen3.7 Max'),
-                  el('option', { value: 'qwen3.7-plus' }, 'Qwen3.7 Plus'),
-                  el('option', { value: 'mimo-v2.5-pro' }, 'MiMo-V2.5-Pro'),
+                  el('option', { value: 'qwen3.8-max' }, 'Qwen3.8 Max'),
+                  el('option', { value: 'qwen3.8-flash' }, 'Qwen3.8 Flash'),
+                  el('option', { value: 'mimo-v2.6-pro' }, 'MiMo-V2.6-Pro'),
                   el('option', { value: 'kimi-k3' }, 'Kimi K3'),
-                  el('option', { value: 'glm-5.2' }, 'GLM-5.2'),
+                  el('option', { value: 'glm-5.3' }, 'GLM-5.3'),
                 ),
               ),
               el('div', { class: 'uets-config-item', style: 'align-items: flex-start;' },
@@ -1696,7 +1728,7 @@
                 ),
                 el('div', { id: 'opencodeGoModelPrice', style: 'width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;' }),
               ),
-              el('div', { id: 'opencodeGoImageNotice', style: 'display: none; padding: 8px 0; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4;' }, 'This DeepSeek model is text-only. Question images are omitted.'),
+              el('div', { id: 'opencodeGoImageNotice', style: 'display: none; padding: 8px 0; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4;' }, 'This model is text-only. Question images are omitted.'),
               el('div', { class: 'uets-config-item' },
                 el('div', { class: 'uets-config-label-container' },
                   el('button', { class: 'uets-config-info', 'data-info': 'Maximum number of tokens in OpenCode Go responses (256-8192).', title: 'Info' }),
@@ -1794,19 +1826,19 @@
 
       // Gemini settings
       document.getElementById('geminiApiKey').value = sharedState.config.geminiApiKey || '';
-      document.getElementById('geminiModel').value = sharedState.config.geminiModel || 'gemini-3.5-flash-lite';
-      document.getElementById('geminiThinkingBudget').value = sharedState.config.geminiThinkingBudget || 512;
+      document.getElementById('geminiModel').value = sharedState.config.geminiModel || DEFAULT_CONFIG.geminiModel;
+      document.getElementById('geminiThinkingLevel').value = sharedState.config.geminiThinkingLevel || DEFAULT_CONFIG.geminiThinkingLevel;
 
       // OpenRouter settings
       document.getElementById('openrouterApiKey').value = sharedState.config.openrouterApiKey || '';
-      document.getElementById('openrouterModel').value = sharedState.config.openrouterModel || 'openai/gpt-5.6-luna';
+      document.getElementById('openrouterModel').value = sharedState.config.openrouterModel || DEFAULT_CONFIG.openrouterModel;
       document.getElementById('openrouterMaxTokens').value = sharedState.config.openrouterMaxTokens || 2048;
       document.getElementById('openrouterReasoningMaxTokens').value = sharedState.config.openrouterReasoningMaxTokens || 2000;
       document.getElementById('openrouterReasoningEffort').value = sharedState.config.openrouterReasoningEffort || 'medium';
 
       // OpenCode Go and hosted DeepSeek settings
       document.getElementById('opencodeGoApiKey').value = sharedState.config.opencodeGoApiKey || '';
-      document.getElementById('opencodeGoModel').value = sharedState.config.opencodeGoModel || 'gpt-5.6-luna';
+      document.getElementById('opencodeGoModel').value = sharedState.config.opencodeGoModel || DEFAULT_CONFIG.opencodeGoModel;
       document.getElementById('opencodeGoMaxTokens').value = sharedState.config.opencodeGoMaxTokens || 2048;
       document.getElementById('deepseekMaxTokens').value = sharedState.config.deepseekMaxTokens || 2048;
 
@@ -1859,7 +1891,11 @@
       const effortItem = document.getElementById('openrouterReasoningEffortItem');
       const tokensItem = document.getElementById('openrouterReasoningTokensItem');
 
-      if (model && OPENROUTER_EFFORT_MODELS.has(model)) {
+      const efforts = OPENROUTER_REASONING_EFFORTS[model];
+      if (efforts) {
+        const select = document.getElementById('openrouterReasoningEffort');
+        for (const option of select.options) option.disabled = !efforts.includes(option.value);
+        select.value = getOpenRouterReasoningEffort(model, select.value);
         effortItem.style.display = 'flex';
         tokensItem.style.display = 'none';
       } else {
@@ -1914,7 +1950,7 @@
       // Gemini settings
       sharedState.config.geminiApiKey = document.getElementById('geminiApiKey').value.trim();
       sharedState.config.geminiModel = document.getElementById('geminiModel').value;
-      sharedState.config.geminiThinkingBudget = readInt('geminiThinkingBudget', DEFAULT_CONFIG.geminiThinkingBudget, { min: 512, max: 8192 });
+      sharedState.config.geminiThinkingLevel = document.getElementById('geminiThinkingLevel').value;
 
       // OpenRouter settings
       sharedState.config.openrouterApiKey = document.getElementById('openrouterApiKey').value.trim();
@@ -2241,7 +2277,7 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
     if (!apiKey) return { ok: false, error: "Gemini: no API key" };
 
     const promptText = buildGeminiPrompt(question, options, !!imageData, platform);
-    const model = sharedState.config.geminiModel || 'gemini-3.5-flash-lite';
+    const model = sharedState.config.geminiModel || DEFAULT_CONFIG.geminiModel;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const parts = [{ text: promptText }];
@@ -2256,7 +2292,7 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
         topP: sharedState.config.topP,
         topK: sharedState.config.topK,
         maxOutputTokens: sharedState.config.maxOutputTokens,
-        thinkingConfig: { thinkingBudget: sharedState.config.geminiThinkingBudget || 512 },
+        thinkingConfig: { thinkingLevel: sharedState.config.geminiThinkingLevel || DEFAULT_CONFIG.geminiThinkingLevel },
       },
       safetySettings: [
         { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
@@ -2275,20 +2311,20 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
 
     const promptText = buildGeminiPrompt(question, options, !!imageData, platform);
     const url = "https://openrouter.ai/api/v1/chat/completions";
-    const model = sharedState.config.openrouterModel || "openai/gpt-5.6-luna";
+    const model = sharedState.config.openrouterModel || DEFAULT_CONFIG.openrouterModel;
 
     const content = [{ type: "text", text: promptText }];
     if (sharedState.config.includeImages && imageData?.base64Data && imageData?.mimeType) {
       content.push({ type: "image_url", image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64Data}` } });
     }
 
-    const usesEffort = OPENROUTER_EFFORT_MODELS.has(model);
+    const usesEffort = Boolean(OPENROUTER_REASONING_EFFORTS[model]);
     const payload = {
       model,
       messages: [{ role: "user", content }],
       max_tokens: sharedState.config.openrouterMaxTokens || 2048,
       reasoning: usesEffort
-        ? { effort: sharedState.config.openrouterReasoningEffort || 'medium' }
+        ? { effort: getOpenRouterReasoningEffort(model, sharedState.config.openrouterReasoningEffort) }
         : { max_tokens: sharedState.config.openrouterReasoningMaxTokens || 2000 },
     };
     if (!OPENROUTER_NO_SAMPLING_MODELS.has(model)) {
@@ -2308,8 +2344,9 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
     const apiKey = getApiKey("opencode-go", { promptIfMissing });
     if (!apiKey) return { ok: false, error: "OpenCode Go: no API key" };
 
-    const model = sharedState.config.opencodeGoModel || "gpt-5.6-luna";
+    const model = sharedState.config.opencodeGoModel || DEFAULT_CONFIG.opencodeGoModel;
     const maxTokens = sharedState.config.opencodeGoMaxTokens || 2048;
+    const supportsSampling = !OPENCODE_GO_NO_SAMPLING_MODELS.has(model);
     const includeImage = Boolean(sharedState.config.includeImages &&
       !OPENCODE_GO_TEXT_ONLY_MODELS.has(model) &&
       imageData?.base64Data && imageData?.mimeType);
@@ -2327,7 +2364,7 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
           },
         });
       }
-      return sendAIRequest(`${OPENCODE_GO_API_BASE}/messages`, {
+      return sendAIRequest(`${OPENCODE_GO_ANTHROPIC_API_BASE}/messages`, {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
@@ -2335,7 +2372,7 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
         model,
         messages: [{ role: "user", content }],
         max_tokens: maxTokens,
-        temperature: sharedState.config.temperature,
+        ...(supportsSampling ? { temperature: sharedState.config.temperature } : {}),
       }, "OpenCode Go");
     }
 
@@ -2371,8 +2408,7 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
       model,
       messages: [{ role: "user", content }],
       max_tokens: maxTokens,
-      temperature: sharedState.config.temperature,
-      top_p: sharedState.config.topP,
+      ...(supportsSampling ? { temperature: sharedState.config.temperature, top_p: sharedState.config.topP } : {}),
     }, "OpenCode Go");
   };
 
@@ -4218,7 +4254,12 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
       configChanged = true;
     }
     if (!sharedState.config.geminiModel) {
-      sharedState.config.geminiModel = 'gemini-3.5-flash-lite';
+      sharedState.config.geminiModel = DEFAULT_CONFIG.geminiModel;
+      configChanged = true;
+    }
+    if (!savedConfig?.geminiThinkingLevel && savedConfig?.geminiThinkingBudget) {
+      const budget = savedConfig.geminiThinkingBudget;
+      sharedState.config.geminiThinkingLevel = budget <= 1024 ? "low" : budget <= 4096 ? "medium" : "high";
       configChanged = true;
     }
 
