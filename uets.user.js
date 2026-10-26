@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Universal Educational Tool Suite
 // @namespace    http://tampermonkey.net/
-// @version      1.12.0
+// @version      1.13.0
 // @description  A unified tool for cheating on online test sites
 // @author       Nyx
 // @license      GPL-3.0
@@ -85,7 +85,7 @@
   const AI_DEFAULTS_MIGRATION_VERSION = 1;
   const OPENCODE_GO_API_BASE = "https://opencode.ai/inference/go/openai/v1";
   const OPENCODE_GO_ANTHROPIC_API_BASE = "https://opencode.ai/inference/go/anthropic/v1";
-  const OPENCODE_GO_SESSION_ID = window.crypto.randomUUID();
+  const AI_SESSION_ID = window.crypto.randomUUID();
 
   const GEMINI_MODEL_MIGRATIONS = {
     "gemini-flash-lite-latest": "gemini-3.8-flash",
@@ -172,6 +172,11 @@
     "z-ai/glm-5.3-flash",
     "deepseek/deepseek-v4-flash",
   ]);
+  // shortcut: MiMo uses validated prompt JSON until its catalog lists native schema support.
+  const OPENCODE_GO_STRUCTURED_OUTPUT_MODELS = new Set([
+    "gpt-6-luna", "claude-haiku-5-5", "qwen3.8-max", "qwen3.8-flash",
+    "deepseek-v4.1-flash", "deepseek-v4-pro", "glm-5.3", "kimi-k3",
+  ]);
   const AI_ANSWER_SCHEMA = {
     type: "object",
     properties: {
@@ -190,9 +195,9 @@
     ...(schema.required && { required: schema.required }),
   });
   const GEMINI_ANSWER_SCHEMA = toGeminiSchema(AI_ANSWER_SCHEMA);
-  const OPENROUTER_ANSWER_SCHEMA = { ...AI_ANSWER_SCHEMA, additionalProperties: false };
+  const STRICT_ANSWER_SCHEMA = { ...AI_ANSWER_SCHEMA, additionalProperties: false };
 
-  // Catalog snapshot: OpenRouter /api/v1/models and models.dev/api.json, 2026-10-16.
+  // Catalog snapshot: OpenRouter /api/v1/models and models.dev/api.json, 2026-10-26.
   const MODEL_PRICING = {
     gemini: {
       "gemini-3.8-flash": { input: 0.75, output: 3.75 },
@@ -216,7 +221,7 @@
       },
       "google/gemini-3.8-flash": { input: 0.825, output: 4.125 },
       "qwen/qwen3.8-flash": { input: 0.15, output: 0.47 },
-      "moonshotai/kimi-k3": { input: 0.304, output: 11.936 },
+      "moonshotai/kimi-k3": { input: 0.2, output: 20 },
       "anthropic/claude-sonnet-5": { input: 2, output: 10 },
       "z-ai/glm-5.3-flash": { input: 0.15, output: 0.5 },
       "deepseek/deepseek-v4-flash": { input: 0.091, output: 0.182 },
@@ -2350,7 +2355,7 @@ Write plainly and directly. Keep explanations short and factual. Avoid filler, p
           json_schema: {
             name: "uets_answer",
             strict: true,
-            schema: OPENROUTER_ANSWER_SCHEMA,
+            schema: STRICT_ANSWER_SCHEMA,
           },
         },
       } : {}),
@@ -2365,6 +2370,7 @@ Write plainly and directly. Keep explanations short and factual. Avoid filler, p
       "Authorization": `Bearer ${apiKey}`,
       "HTTP-Referer": window.location.href,
       "X-Title": "UETS - Universal Educational Tool Suite",
+      "x-session-id": AI_SESSION_ID,
     }, payload, "OpenRouter", options);
   };
 
@@ -2375,6 +2381,7 @@ Write plainly and directly. Keep explanations short and factual. Avoid filler, p
     const model = sharedState.config.opencodeGoModel || DEFAULT_CONFIG.opencodeGoModel;
     const maxTokens = sharedState.config.opencodeGoMaxTokens || 2048;
     const supportsSampling = !OPENCODE_GO_NO_SAMPLING_MODELS.has(model);
+    const supportsSchema = OPENCODE_GO_STRUCTURED_OUTPUT_MODELS.has(model);
     const includeImage = Boolean(sharedState.config.includeImages &&
       !OPENCODE_GO_TEXT_ONLY_MODELS.has(model) &&
       imageData?.base64Data && imageData?.mimeType);
@@ -2396,10 +2403,13 @@ Write plainly and directly. Keep explanations short and factual. Avoid filler, p
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
-        "x-opencode-session": OPENCODE_GO_SESSION_ID,
+        "x-opencode-session": AI_SESSION_ID,
       }, {
         model,
-        system: AI_SYSTEM_PROMPT,
+        system: [{ type: "text", text: AI_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+        ...(supportsSchema ? {
+          output_config: { format: { type: "json_schema", schema: STRICT_ANSWER_SCHEMA } },
+        } : {}),
         messages: [{ role: "user", content }],
         max_tokens: maxTokens,
         ...(supportsSampling ? { temperature: sharedState.config.temperature } : {}),
@@ -2417,10 +2427,13 @@ Write plainly and directly. Keep explanations short and factual. Avoid filler, p
       return sendAIRequest(`${OPENCODE_GO_API_BASE}/responses`, {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`,
-        "x-opencode-session": OPENCODE_GO_SESSION_ID,
+        "x-opencode-session": AI_SESSION_ID,
       }, {
         model,
         instructions: AI_SYSTEM_PROMPT,
+        ...(supportsSchema ? {
+          text: { format: { type: "json_schema", name: "uets_answer", strict: true, schema: STRICT_ANSWER_SCHEMA } },
+        } : {}),
         input: [{ role: "user", content }],
         max_output_tokens: maxTokens,
       }, "OpenCode Go", options);
@@ -2436,9 +2449,15 @@ Write plainly and directly. Keep explanations short and factual. Avoid filler, p
     return sendAIRequest(`${OPENCODE_GO_API_BASE}/chat/completions`, {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${apiKey}`,
-      "x-opencode-session": OPENCODE_GO_SESSION_ID,
+      "x-opencode-session": AI_SESSION_ID,
     }, {
       model,
+      ...(supportsSchema ? {
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "uets_answer", strict: true, schema: STRICT_ANSWER_SCHEMA },
+        },
+      } : {}),
       messages: [
         { role: "system", content: AI_SYSTEM_PROMPT },
         { role: "user", content },

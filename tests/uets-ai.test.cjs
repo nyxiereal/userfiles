@@ -77,7 +77,7 @@ function load(saved = null, { geminiKey = '', promptResult = '', statuses = [], 
       OPENCODE_GO_NO_SAMPLING_MODELS, FALLBACK_PROVIDER_ORDER,
       OPENROUTER_EXPLICIT_CACHE_MODELS, GEMINI_STRUCTURED_OUTPUT_MODELS,
       OPENROUTER_STRUCTURED_OUTPUT_MODELS, AI_ANSWER_SCHEMA, GEMINI_ANSWER_SCHEMA,
-      OPENROUTER_ANSWER_SCHEMA,
+      STRICT_ANSWER_SCHEMA, OPENCODE_GO_STRUCTURED_OUTPUT_MODELS,
       AI_SYSTEM_PROMPT, buildGeminiPrompt, buildQuestionPrompt, validateAIAnswer, choiceNumbersToIndices, handleAIResponse,
       askGemini, askOpenRouter, askOpenCodeGo, askProvider, resetConfig,
       askAIWithFallback, askAIForQuestion, providerSupportsImages, sharedState,
@@ -215,7 +215,8 @@ test('OpenRouter catalog entries have verified pricing, reasoning, sampling, and
       assert.equal(payload.response_format.type, 'json_schema');
       assert.equal(payload.response_format.json_schema.name, 'uets_answer');
       assert.equal(payload.response_format.json_schema.strict, true);
-      assert.deepEqual(payload.response_format.json_schema.schema, JSON.parse(JSON.stringify(ai.OPENROUTER_ANSWER_SCHEMA)));
+      assert.deepEqual(payload.response_format.json_schema.schema, JSON.parse(JSON.stringify(ai.STRICT_ANSWER_SCHEMA)));
+      assert.equal(sent.at(-1).headers['x-session-id'], 'uets-test-session');
       const efforts = ai.OPENROUTER_REASONING_EFFORTS[model];
       if (efforts) assert.ok(efforts.includes(payload.reasoning.effort));
       else assert.equal(payload.reasoning.max_tokens, ai.DEFAULT_CONFIG.openrouterReasoningMaxTokens);
@@ -244,6 +245,8 @@ test('OpenRouter catalog entries have verified pricing, reasoning, sampling, and
   assert.equal(ai.MODEL_PRICING.openrouter['z-ai/glm-5.3-flash'].output, 0.5);
   assert.equal(ai.MODEL_PRICING.openrouter['anthropic/claude-sonnet-5'].input, 2);
   assert.equal(ai.MODEL_PRICING.openrouter['anthropic/claude-sonnet-5'].output, 10);
+  assert.equal(ai.MODEL_PRICING.openrouter['moonshotai/kimi-k3'].input, 0.2);
+  assert.equal(ai.MODEL_PRICING.openrouter['moonshotai/kimi-k3'].output, 20);
 });
 
 test('OpenCode Go routes each model through its protocol with correct image and sampling support', async () => {
@@ -257,25 +260,48 @@ test('OpenCode Go routes each model through its protocol with correct image and 
     assert.equal(payload.model, model);
     assert.equal(headers['x-opencode-session'], 'uets-test-session');
     assert.equal('cache_control' in payload, false);
-    assert.equal('response_format' in payload, false);
-    assert.equal('output_config' in payload, false);
-    assert.equal('text' in payload, false);
+    const supportsSchema = ai.OPENCODE_GO_STRUCTURED_OUTPUT_MODELS.has(model);
+    let format;
     let content;
     if (ai.OPENCODE_GO_ANTHROPIC_MODELS.has(model)) {
       assert.equal(url, 'https://opencode.ai/inference/go/anthropic/v1/messages');
       assert.equal(headers['x-api-key'], 'test-key');
-      assert.equal(payload.system, ai.AI_SYSTEM_PROMPT);
+      assert.deepEqual(payload.system, [{
+        type: 'text', text: ai.AI_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' },
+      }]);
+      format = payload.output_config?.format;
+      assert.equal(format.type, 'json_schema');
+      assert.equal('response_format' in payload, false);
+      assert.equal('text' in payload, false);
       content = payload.messages[0].content;
     } else if (ai.OPENCODE_GO_RESPONSES_MODELS.has(model)) {
       assert.equal(url, 'https://opencode.ai/inference/go/openai/v1/responses');
       assert.equal(headers.Authorization, 'Bearer test-key');
       assert.equal(payload.instructions, ai.AI_SYSTEM_PROMPT);
+      format = payload.text?.format;
+      assert.equal(format.type, 'json_schema');
+      assert.equal(format.strict, true);
+      assert.equal('response_format' in payload, false);
+      assert.equal('output_config' in payload, false);
       content = payload.input[0].content;
     } else {
       assert.equal(url, 'https://opencode.ai/inference/go/openai/v1/chat/completions');
       assert.equal(headers.Authorization, 'Bearer test-key');
       assert.deepEqual(payload.messages[0], { role: 'system', content: ai.AI_SYSTEM_PROMPT });
+      if (supportsSchema) {
+        assert.equal(payload.response_format.type, 'json_schema');
+        assert.equal(payload.response_format.json_schema.strict, true);
+      }
+      format = payload.response_format?.json_schema;
+      assert.equal('output_config' in payload, false);
+      assert.equal('text' in payload, false);
       content = payload.messages[1].content;
+    }
+    if (supportsSchema) {
+      assert.deepEqual(format.schema, JSON.parse(JSON.stringify(ai.STRICT_ANSWER_SCHEMA)));
+    } else {
+      assert.equal(format, undefined);
+      assert.equal('response_format' in payload, false);
     }
     assert.equal(content.length, ai.OPENCODE_GO_TEXT_ONLY_MODELS.has(model) ? 1 : 2);
     assert.equal(ai.providerSupportsImages('opencode-go'), !ai.OPENCODE_GO_TEXT_ONLY_MODELS.has(model));
