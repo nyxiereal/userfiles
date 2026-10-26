@@ -2801,6 +2801,8 @@ Write plainly and directly. Keep explanations short and factual. Avoid filler, p
       }
 
       // Remove correct answer highlighting
+      document.querySelectorAll('div[role="radio"].uets-correct-answer, div[role="checkbox"].uets-correct-answer')
+        .forEach((choice) => choice.classList.remove("uets-correct-answer"));
       document.querySelectorAll("button.option.uets-correct-answer").forEach((button) => {
         button.classList.remove("uets-correct-answer");
         button.style.position = "";
@@ -3703,7 +3705,7 @@ Write plainly and directly. Keep explanations short and factual. Avoid filler, p
       return {
         isCurrent,
         onAnswer: (choiceNumbers) => {
-          if (!isCurrent()) return;
+          if (!sharedState.uiModificationsEnabled || !isCurrent()) return;
           elements.forEach((choice) => choice.classList.remove("uets-correct-answer"));
           choiceNumbersToIndices(choiceNumbers).forEach((index) => elements[index]?.classList.add("uets-correct-answer"));
         },
