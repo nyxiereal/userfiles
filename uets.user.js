@@ -38,7 +38,7 @@
     timerBonusPoints: 270,
     enableSpoofFullscreen: true,
     serverUrl: "https://uets.meowery.eu",
-    aiProvider: "deepseek",
+    aiProvider: "openrouter",
     geminiApiKey: "",
     geminiModel: "gemini-3.8-flash",
     geminiThinkingLevel: "low",
@@ -50,7 +50,6 @@
     opencodeGoApiKey: "",
     opencodeGoModel: "gpt-6-luna",
     opencodeGoMaxTokens: 2048,
-    deepseekMaxTokens: 2048,
     maxOutputTokens: 1024,
     temperature: 0.2,
     topP: 0.95,
@@ -83,8 +82,7 @@
   ];
 
 
-  const DEEPSEEK_API_URL = "https://q5dh1rfszfym23hj.us-east-2.aws.endpoints.huggingface.cloud/v1/chat/completions";
-  const DEEPSEEK_MODEL = "deepseek-ai/DeepSeek-V4-Flash-0731";
+  const AI_DEFAULTS_MIGRATION_VERSION = 1;
   const OPENCODE_GO_API_BASE = "https://opencode.ai/inference/go/openai/v1";
   const OPENCODE_GO_ANTHROPIC_API_BASE = "https://opencode.ai/inference/go/anthropic/v1";
 
@@ -180,6 +178,9 @@
       "google/gemini-3.8-flash": { input: 0.825, output: 4.125 },
       "qwen/qwen3.8-flash": { input: 0.15, output: 0.47 },
       "moonshotai/kimi-k3": { input: 0.304, output: 11.936 },
+      "anthropic/claude-sonnet-5": { input: 2, output: 10 },
+      "z-ai/glm-5.3-flash": { input: 0.15, output: 0.5 },
+      "deepseek/deepseek-v4-flash": { input: 0.091, output: 0.182 },
     },
     "opencode-go": {
       "claude-haiku-5-5": {
@@ -208,20 +209,12 @@
         tiers: [{ context: "Above 272K context", input: 0.2, output: 0.75 }],
       },
     },
-    deepseek: {
-      [DEEPSEEK_MODEL]: {
-        input: 0,
-        output: 0,
-        note: "No usage charge on this hosted endpoint.",
-      },
-    },
   };
 
   const MODEL_PRICING_SOURCES = {
     gemini: "models.dev",
     openrouter: "OpenRouter model API",
     "opencode-go": "models.dev and OpenCode Go docs",
-    deepseek: "Hosted endpoint",
   };
 
   const OPENROUTER_REASONING_EFFORTS = {
@@ -230,13 +223,16 @@
     "x-ai/grok-4.7": ["low", "medium", "high", "xhigh"],
     "google/gemini-3.8-flash": ["low", "medium", "high"],
     "moonshotai/kimi-k3": ["none", "low", "high", "max"],
+    "anthropic/claude-sonnet-5": ["low", "medium", "high", "xhigh", "max"],
   };
   const getOpenRouterReasoningEffort = (model, effort) =>
     OPENROUTER_REASONING_EFFORTS[model]?.includes(effort) ? effort : "low";
   const OPENROUTER_NO_SAMPLING_MODELS = new Set([
     "openai/gpt-6-luna",
     "anthropic/claude-haiku-5.5",
+    "anthropic/claude-sonnet-5",
   ]);
+  const OPENROUTER_TEXT_ONLY_MODELS = new Set(["deepseek/deepseek-v4-flash"]);
 
 
   const PROFILES = {
@@ -494,8 +490,7 @@
       }
       #geminiModelPrice,
       #openrouterModelPrice,
-      #opencodeGoModelPrice,
-      #deepseekModelPrice {
+      #opencodeGoModelPrice {
         width: 100% !important;
         text-align: left !important;
       }
@@ -1363,7 +1358,12 @@
   };
 
   const resetConfig = () => {
-    sharedState.config = { ...DEFAULT_CONFIG };
+    sharedState.config = {
+      ...DEFAULT_CONFIG,
+      ...(sharedState.config.aiDefaultsMigration === AI_DEFAULTS_MIGRATION_VERSION
+        ? { aiDefaultsMigration: AI_DEFAULTS_MIGRATION_VERSION }
+        : {}),
+    };
     saveConfig();
   };
 
@@ -1533,12 +1533,11 @@
                 el('option', { value: 'gemini' }, 'Gemini'),
                 el('option', { value: 'openrouter' }, 'OpenRouter'),
                 el('option', { value: 'opencode-go' }, 'OpenCode Go'),
-                el('option', { value: 'deepseek' }, 'DeepSeek V4 Flash'),
               ),
             ),
             el('div', { class: 'uets-config-item' },
               el('div', { class: 'uets-config-label-container' },
-                el('button', { class: 'uets-config-info', 'data-info': 'Whether to include question images when the selected model supports them. Hosted DeepSeek, OpenCode Go DeepSeek V4 Pro, and GLM-5.3 are text-only.', title: 'Info' }),
+                el('button', { class: 'uets-config-info', 'data-info': 'Whether to include question images when the selected model supports them. OpenRouter DeepSeek V4 Flash, OpenCode Go DeepSeek V4 Pro, and GLM-5.3 are text-only.', title: 'Info' }),
                 el('label', { class: 'uets-config-label' }, 'Include images'),
               ),
               el('label', { class: 'uets-switch' },
@@ -1643,6 +1642,9 @@
                   el('option', { value: 'google/gemini-3.8-flash' }, 'google/gemini-3.8-flash'),
                   el('option', { value: 'qwen/qwen3.8-flash' }, 'qwen/qwen3.8-flash'),
                   el('option', { value: 'moonshotai/kimi-k3' }, 'moonshotai/kimi-k3'),
+                  el('option', { value: 'anthropic/claude-sonnet-5' }, 'anthropic/claude-sonnet-5'),
+                  el('option', { value: 'z-ai/glm-5.3-flash' }, 'z-ai/glm-5.3-flash'),
+                  el('option', { value: 'deepseek/deepseek-v4-flash' }, 'deepseek/deepseek-v4-flash'),
                 ),
               ),
               el('div', { class: 'uets-config-item', style: 'align-items: flex-start;' },
@@ -1737,31 +1739,6 @@
                 el('input', { type: 'number', class: 'uets-config-input', id: 'opencodeGoMaxTokens', min: '256', max: '8192' }),
               ),
             ),
-            el('div', { class: 'uets-config-subsection', id: 'deepseekSettings', style: 'display: none;' },
-              el('div', { class: 'uets-config-section-title', style: 'font-size: 14px; margin-top: 8px;' }, 'DeepSeek Settings'),
-              el('div', { style: 'padding: 8px 0; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4;' }, 'This hosted model is text-only. Question images are omitted.'),
-              el('div', { class: 'uets-config-item' },
-                el('div', { class: 'uets-config-label-container' },
-                  el('button', { class: 'uets-config-info', 'data-info': 'This endpoint serves only DeepSeek V4 Flash and does not require your own API key.', title: 'Info' }),
-                  el('label', { class: 'uets-config-label' }, 'Model'),
-                ),
-                el('input', { type: 'text', class: 'uets-config-input', value: 'DeepSeek V4 Flash 0731', style: 'width: 200px;', readonly: '' }),
-              ),
-              el('div', { class: 'uets-config-item', style: 'align-items: flex-start;' },
-                el('div', { class: 'uets-config-label-container' },
-                  el('button', { class: 'uets-config-info', 'data-info': 'The supplied hosted endpoint does not require an account or bill token usage.', title: 'Info' }),
-                  el('label', { class: 'uets-config-label' }, 'Price / 1M tokens'),
-                ),
-                el('div', { id: 'deepseekModelPrice', style: 'width: 200px; color: var(--md-on-surface-variant); font-size: 12px; line-height: 1.4; text-align: right;' }),
-              ),
-              el('div', { class: 'uets-config-item' },
-                el('div', { class: 'uets-config-label-container' },
-                  el('button', { class: 'uets-config-info', 'data-info': 'Maximum number of tokens in DeepSeek responses (256-8192).', title: 'Info' }),
-                  el('label', { class: 'uets-config-label' }, 'Max output tokens'),
-                ),
-                el('input', { type: 'number', class: 'uets-config-input', id: 'deepseekMaxTokens', min: '256', max: '8192' }),
-              ),
-            ),
           ),
         ),
       ),
@@ -1805,7 +1782,6 @@
       renderModelPrice("openrouter", gui.querySelector("#openrouterModel")?.value, "openrouterModelPrice");
       const opencodeGoModel = gui.querySelector("#opencodeGoModel")?.value;
       renderModelPrice("opencode-go", opencodeGoModel, "opencodeGoModelPrice");
-      renderModelPrice("deepseek", DEEPSEEK_MODEL, "deepseekModelPrice");
       const imageNotice = gui.querySelector("#opencodeGoImageNotice");
       if (imageNotice) {
         imageNotice.style.display = OPENCODE_GO_TEXT_ONLY_MODELS.has(opencodeGoModel) ? "block" : "none";
@@ -1822,7 +1798,7 @@
       document.getElementById('enableSpoofFullscreen').checked = sharedState.config.enableSpoofFullscreen;
       document.getElementById('enableSiteOptimizations').checked = sharedState.config.enableSiteOptimizations;
       document.getElementById('serverUrl').value = sharedState.config.serverUrl;
-      document.getElementById('aiProvider').value = sharedState.config.aiProvider || 'deepseek';
+      document.getElementById('aiProvider').value = sharedState.config.aiProvider || DEFAULT_CONFIG.aiProvider;
 
       // Gemini settings
       document.getElementById('geminiApiKey').value = sharedState.config.geminiApiKey || '';
@@ -1836,11 +1812,10 @@
       document.getElementById('openrouterReasoningMaxTokens').value = sharedState.config.openrouterReasoningMaxTokens || 2000;
       document.getElementById('openrouterReasoningEffort').value = sharedState.config.openrouterReasoningEffort || 'medium';
 
-      // OpenCode Go and hosted DeepSeek settings
+      // OpenCode Go settings
       document.getElementById('opencodeGoApiKey').value = sharedState.config.opencodeGoApiKey || '';
       document.getElementById('opencodeGoModel').value = sharedState.config.opencodeGoModel || DEFAULT_CONFIG.opencodeGoModel;
       document.getElementById('opencodeGoMaxTokens').value = sharedState.config.opencodeGoMaxTokens || 2048;
-      document.getElementById('deepseekMaxTokens').value = sharedState.config.deepseekMaxTokens || 2048;
 
       // Shared AI settings
       document.getElementById('includeImages').checked = sharedState.config.includeImages;
@@ -1878,7 +1853,6 @@
         gemini: document.getElementById('geminiSettings'),
         openrouter: document.getElementById('openrouterSettings'),
         'opencode-go': document.getElementById('opencodeGoSettings'),
-        deepseek: document.getElementById('deepseekSettings'),
       };
       Object.entries(settingsByProvider).forEach(([name, settings]) => {
         settings.style.display = name === provider ? 'block' : 'none';
@@ -1959,11 +1933,10 @@
       sharedState.config.openrouterReasoningMaxTokens = readInt('openrouterReasoningMaxTokens', DEFAULT_CONFIG.openrouterReasoningMaxTokens, { min: 256, max: 8192 });
       sharedState.config.openrouterReasoningEffort = document.getElementById('openrouterReasoningEffort').value;
 
-      // OpenCode Go and hosted DeepSeek settings
+      // OpenCode Go settings
       sharedState.config.opencodeGoApiKey = document.getElementById('opencodeGoApiKey').value.trim();
       sharedState.config.opencodeGoModel = document.getElementById('opencodeGoModel').value;
       sharedState.config.opencodeGoMaxTokens = readInt('opencodeGoMaxTokens', DEFAULT_CONFIG.opencodeGoMaxTokens, { min: 256, max: 8192 });
-      sharedState.config.deepseekMaxTokens = readInt('deepseekMaxTokens', DEFAULT_CONFIG.deepseekMaxTokens, { min: 256, max: 8192 });
 
       // Shared AI settings
       sharedState.config.includeImages = document.getElementById('includeImages').checked;
@@ -2068,12 +2041,11 @@
     gemini: "Gemini",
     openrouter: "OpenRouter",
     "opencode-go": "OpenCode Go",
-    deepseek: "DeepSeek",
   };
 
   // The key is only asked for interactively when the user picked that provider;
   // fallback attempts skip providers that have no key stored instead of prompting.
-  const getApiKey = (provider = sharedState.config.aiProvider || "deepseek", { promptIfMissing = true } = {}) => {
+  const getApiKey = (provider = sharedState.config.aiProvider || DEFAULT_CONFIG.aiProvider, { promptIfMissing = true } = {}) => {
     const field = API_KEY_FIELDS[provider];
     if (!field) return null;
 
@@ -2309,12 +2281,15 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
     const apiKey = getApiKey("openrouter", { promptIfMissing });
     if (!apiKey) return { ok: false, error: "OpenRouter: no API key" };
 
-    const promptText = buildGeminiPrompt(question, options, !!imageData, platform);
-    const url = "https://openrouter.ai/api/v1/chat/completions";
     const model = sharedState.config.openrouterModel || DEFAULT_CONFIG.openrouterModel;
+    const includeImage = Boolean(sharedState.config.includeImages &&
+      !OPENROUTER_TEXT_ONLY_MODELS.has(model) &&
+      imageData?.base64Data && imageData?.mimeType);
+    const promptText = buildGeminiPrompt(question, options, includeImage, platform);
+    const url = "https://openrouter.ai/api/v1/chat/completions";
 
     const content = [{ type: "text", text: promptText }];
-    if (sharedState.config.includeImages && imageData?.base64Data && imageData?.mimeType) {
+    if (includeImage) {
       content.push({ type: "image_url", image_url: { url: `data:${imageData.mimeType};base64,${imageData.base64Data}` } });
     }
 
@@ -2412,24 +2387,8 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
     }, "OpenCode Go");
   };
 
-  const askDeepSeek = (question, options, _imageData, platform = "quiz") => {
-    const promptText = buildGeminiPrompt(question, options, false, platform);
-
-    return sendAIRequest(DEEPSEEK_API_URL, {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer anything",
-    }, {
-      model: DEEPSEEK_MODEL,
-      messages: [{ role: "user", content: promptText }],
-      stream: false,
-      max_tokens: sharedState.config.deepseekMaxTokens || 2048,
-      temperature: sharedState.config.temperature,
-      top_p: sharedState.config.topP,
-    }, "DeepSeek");
-  };
-
   const providerSupportsImages = (provider) =>
-    provider !== "deepseek" &&
+    !(provider === "openrouter" && OPENROUTER_TEXT_ONLY_MODELS.has(sharedState.config.openrouterModel)) &&
     !(provider === "opencode-go" && OPENCODE_GO_TEXT_ONLY_MODELS.has(sharedState.config.opencodeGoModel));
 
   const providerHasCredentials = (provider) => {
@@ -2446,24 +2405,25 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
       case "opencode-go":
         return askOpenCodeGo(question, options, imageData, platform, { promptIfMissing });
       default:
-        return askDeepSeek(question, options, imageData, platform);
+        return { ok: false, error: `Unsupported AI provider: ${provider}` };
     }
   };
 
-  // DeepSeek needs no key, so it is always available as a last resort.
-  const FALLBACK_PROVIDER_ORDER = ["gemini", "openrouter", "opencode-go", "deepseek"];
+  const FALLBACK_PROVIDER_ORDER = ["gemini", "openrouter", "opencode-go"];
 
   const askAIWithFallback = async (
     question,
     options,
     imageData,
     platform = "quiz",
-    { imageOnly = false, isCurrent = null } = {},
+    { imageOnly = false, isCurrent = null, promptIfMissing = true } = {},
   ) => {
     if (isCurrent && !isCurrent()) return false;
 
     const requestId = ++sharedState.aiRequestId;
-    const primary = sharedState.config.aiProvider || "deepseek";
+    const primary = FALLBACK_PROVIDER_ORDER.includes(sharedState.config.aiProvider)
+      ? sharedState.config.aiProvider
+      : DEFAULT_CONFIG.aiProvider;
     const chain = [primary, ...FALLBACK_PROVIDER_ORDER.filter((provider) => provider !== primary)];
     const hasImageProvider = imageOnly && chain.some((provider) =>
       providerSupportsImages(provider) && (provider === primary || providerHasCredentials(provider)));
@@ -2478,7 +2438,7 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
       }
 
       const isPrimary = provider === primary;
-      if (!isPrimary && !providerHasCredentials(provider)) continue;
+      if (!providerHasCredentials(provider) && (!isPrimary || !promptIfMissing)) continue;
       if (hasImageProvider && !providerSupportsImages(provider)) continue;
 
       attempts += 1;
@@ -2491,7 +2451,9 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
 
       let result;
       try {
-        result = await askProvider(provider, question, options, imageData, platform, { promptIfMissing: isPrimary });
+        result = await askProvider(provider, question, options, imageData, platform, {
+          promptIfMissing: isPrimary && promptIfMissing,
+        });
       } catch (error) {
         result = { ok: false, error: `${label}: ${error?.message || error}` };
       }
@@ -2508,8 +2470,11 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
       if (result?.error) failures.push(result.error);
     }
 
+    const noConfiguredProviders = !FALLBACK_PROVIDER_ORDER.some(providerHasCredentials);
     showResponsePopup(
-      `AI request failed.\n${failures.join("\n") || "No AI provider is configured."}`,
+      noConfiguredProviders
+        ? "No AI provider is configured. Add a Gemini, OpenRouter, or OpenCode Go API key in UETS Settings."
+        : `AI request failed.\n${failures.join("\n") || "No configured AI provider could answer."}`,
       false,
       "AI Assistant",
     );
@@ -2517,8 +2482,10 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
   };
 
   // Shared by the "Ask AI" button and the auto-ask flow.
-  const askAIForQuestion = async (questionText, options, imageUrl, platform = "quiz") => {
-    const provider = sharedState.config.aiProvider || "deepseek";
+  const askAIForQuestion = async (questionText, options, imageUrl, platform = "quiz", promptIfMissing = true) => {
+    const provider = FALLBACK_PROVIDER_ORDER.includes(sharedState.config.aiProvider)
+      ? sharedState.config.aiProvider
+      : DEFAULT_CONFIG.aiProvider;
     const questionId = platform === "quiz" ? waygroundModule.getCurrentQuestionId() : null;
     const isCurrent = questionId
       ? () => waygroundModule.getCurrentQuestionId() === questionId
@@ -2545,6 +2512,7 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
     return askAIWithFallback(question, options, imageData, platform, {
       imageOnly: !hasText && Boolean(imageData),
       isCurrent,
+      promptIfMissing,
     });
   };
 
@@ -3532,7 +3500,7 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
           ) {
             sharedState.autoAIAsked.add(currentQuestionId);
             GM_log(`[*] No known answer for ${currentQuestionId}, asking the AI automatically`);
-            askAIForQuestion(questionTitle, optionTexts, questionImageUrl, "quiz");
+            askAIForQuestion(questionTitle, optionTexts, questionImageUrl, "quiz", false);
           }
         }
       }
@@ -4238,6 +4206,27 @@ ${hasOptions ? "Use 1-indexed option numbers in the answer." : "Put the answer t
     if (!sharedState.config.geminiApiKey) {
       sharedState.config.geminiApiKey = GM_getValue(GEMINI_API_KEY_STORAGE, "");
       configChanged = !!sharedState.config.geminiApiKey;
+    }
+
+    // Remove the retired hosted DeepSeek output setting.
+    if ("deepseekMaxTokens" in sharedState.config) {
+      delete sharedState.config.deepseekMaxTokens;
+      configChanged = true;
+    }
+
+    // Apply the Luna default once. Keep an existing Go setup on Go when that was the
+    // selected provider or the only configured provider key.
+    if (sharedState.config.aiDefaultsMigration !== AI_DEFAULTS_MIGRATION_VERSION) {
+      const hasGoKey = Boolean(String(sharedState.config.opencodeGoApiKey || "").trim());
+      const hasOpenRouterKey = Boolean(String(sharedState.config.openrouterApiKey || "").trim());
+      const hasGeminiKey = Boolean(String(sharedState.config.geminiApiKey || GM_getValue(GEMINI_API_KEY_STORAGE, "") || "").trim());
+      const useOpenCodeGo = savedConfig?.aiProvider === "opencode-go" ||
+        (hasGoKey && !hasOpenRouterKey && !hasGeminiKey);
+      sharedState.config.aiProvider = useOpenCodeGo ? "opencode-go" : "openrouter";
+      sharedState.config.openrouterModel = DEFAULT_CONFIG.openrouterModel;
+      sharedState.config.opencodeGoModel = DEFAULT_CONFIG.opencodeGoModel;
+      sharedState.config.aiDefaultsMigration = AI_DEFAULTS_MIGRATION_VERSION;
+      configChanged = true;
     }
 
     // Ensure OpenRouter defaults are set
